@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deepseek-ocr-api"
+version = "1.0.0"
+description = "FastAPI service for OCR processing using DeepSeek-OCR model"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Maximiliano Veiga"}
+]
+keywords = ["ocr", "deepseek", "fastapi", "document-processing"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Framework :: FastAPI",
+]
+
+dependencies = [
+    "accelerate==1.11.0",
+    "fastapi==0.115.5",
+    "uvicorn==0.32.0",
+    "pydantic==2.9.2",
+    "PyMuPDF==1.25.0",
+    "transformers==4.47.1",
+    "torch>=2.0.0",
+    "pillow==10.4.0",
+    "python-multipart==0.0.20",
+    "python-dotenv==1.2.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.4",
+    "pytest-asyncio==0.24.0",
+    "pytest-cov==6.0.0",
+    "httpx==0.28.1",
+]
+
+[project.scripts]
+deepseek-ocr-api = "deepseek_ocr_api.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["deepseek_ocr_api*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --strict-markers"
+markers = [
+    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+]
+

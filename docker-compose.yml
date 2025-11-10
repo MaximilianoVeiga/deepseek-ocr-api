@@ -1,0 +1,21 @@
+version: '3.9'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    environment:
+      - DS_OCR_MODEL=deepseek-ai/DeepSeek-OCR
+      - PORT=3000
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./examples:/app/examples
+    command: ["python3", "-u", "-m", "main"]
+
