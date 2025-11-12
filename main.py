@@ -67,7 +67,8 @@ def main() -> None:
             app,
             host=config.host,
             port=config.port,
-            log_level="info"
+            log_level="info",
+            ws="none"  # Disable websockets to avoid deprecation warnings
         )
         
     except KeyboardInterrupt:

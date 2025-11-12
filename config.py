@@ -91,6 +91,12 @@ class Config(BaseModel):
     # CORS configuration
     cors_origins: list[str] = Field(default=DEFAULT_CORS_ORIGINS, description="CORS allowed origins")
     
+    # Security configuration
+    api_key_enabled: bool = Field(default=False, description="Enable API key authentication")
+    api_key: str = Field(default="", description="API key for authentication")
+    rate_limit_per_minute: int = Field(default=60, description="Rate limit per minute per IP")
+    prompt_max_length: int = Field(default=2000, description="Maximum prompt length")
+    
     # Application metadata
     version: str = Field(default=DEFAULT_VERSION, description="API version")
     title: str = Field(default=APP_NAME, description="API title")
@@ -140,6 +146,34 @@ class Config(BaseModel):
         
         return v
     
+    @field_validator("api_key_enabled")
+    @classmethod
+    def validate_api_key_config(cls, v: bool, info) -> bool:
+        """Validate API key configuration."""
+        # This validator runs before api_key field is set, so we can't check it here
+        # The validation will be done in model_validator
+        return v
+    
+    def model_post_init(self, __context) -> None:
+        """Post-initialization validation."""
+        import warnings
+        
+        # Warn if API key is enabled but not set
+        if self.api_key_enabled and not self.api_key:
+            warnings.warn(
+                "API key authentication is enabled but no API key is configured. "
+                "Set API_KEY environment variable.",
+                UserWarning
+            )
+        
+        # Warn if CORS is wide open in production
+        if self.environment == "production" and "*" in self.cors_origins:
+            warnings.warn(
+                "CORS is set to allow all origins (*) in production environment. "
+                "Consider restricting to specific domains for better security.",
+                UserWarning
+            )
+    
     @property
     def max_file_size_bytes(self) -> int:
         """Get max file size in bytes."""
@@ -165,6 +199,10 @@ def load_config() -> Config:
         max_file_size_mb=int(os.getenv("MAX_FILE_SIZE_MB", str(DEFAULT_MAX_FILE_SIZE_MB))),
         max_pdf_pages=int(os.getenv("MAX_PDF_PAGES", str(DEFAULT_MAX_PDF_PAGES))),
         cors_origins=os.getenv("CORS_ORIGINS", "*").split(","),
+        api_key_enabled=os.getenv("API_KEY_ENABLED", "false").lower() in ("true", "1", "yes"),
+        api_key=os.getenv("API_KEY", ""),
+        rate_limit_per_minute=int(os.getenv("RATE_LIMIT_PER_MINUTE", "60")),
+        prompt_max_length=int(os.getenv("PROMPT_MAX_LENGTH", "2000")),
         version=os.getenv("VERSION", DEFAULT_VERSION),
         title=os.getenv("API_TITLE", APP_NAME),
         environment=os.getenv("ENVIRONMENT", "development"),

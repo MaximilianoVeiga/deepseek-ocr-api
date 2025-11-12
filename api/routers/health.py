@@ -5,8 +5,7 @@ from typing import Dict, Any
 
 from models import HealthResponse
 from services import OCRService
-from config import Config
-from api.dependencies import get_ocr_service_dependency, get_config_dependency
+from api.dependencies import get_ocr_service_dependency
 
 router = APIRouter(tags=["health"])
 
@@ -15,7 +14,7 @@ router = APIRouter(tags=["health"])
     "/health",
     response_model=HealthResponse,
     summary="Basic health check",
-    description="Simple health check endpoint. Returns `{\"ok\": true}` if API is operational.",
+    description="Simple health check endpoint. Returns ok:true if API is operational.",
     responses={
         200: {
             "description": "API is operational",
@@ -39,63 +38,84 @@ async def health_check() -> HealthResponse:
 
 
 @router.get(
-    "/health/detailed",
-    response_model=Dict[str, Any],
-    summary="Detailed health check",
-    description="Health check with system information including version, model status, device, and configuration limits.",
+    "/health/ready",
+    response_model=HealthResponse,
+    summary="Readiness probe",
+    description="Kubernetes-style readiness probe. Returns 200 if model is loaded and ready to serve requests.",
     responses={
         200: {
-            "description": "Detailed health status with system information",
+            "description": "Service is ready to handle requests",
             "content": {
                 "application/json": {
-                    "example": {
-                        "ok": True,
-                        "version": "1.0.0",
-                        "environment": "production",
-                        "model": {
-                            "name": "deepseek-ai/DeepSeek-OCR",
-                            "loaded": True,
-                            "device": "cuda"
-                        },
-                        "configuration": {
-                            "max_file_size_mb": 50,
-                            "max_pdf_pages": 100,
-                            "pdf_dpi": 220
-                        }
-                    }
+                    "example": {"ok": True}
+                }
+            }
+        },
+        503: {
+            "description": "Service not ready (model not loaded)",
+            "content": {
+                "application/json": {
+                    "example": {"ok": False}
                 }
             }
         }
     },
-    response_description="System information"
+    response_description="Readiness status"
 )
-async def detailed_health_check(
-    service: OCRService = Depends(get_ocr_service_dependency),
-    config: Config = Depends(get_config_dependency)
+async def readiness_check(
+    service: OCRService = Depends(get_ocr_service_dependency)
 ) -> Dict[str, Any]:
     """
-    Detailed health check endpoint with model and system information.
+    Readiness probe for Kubernetes deployments.
+    
+    Checks if the model is loaded and service is ready to handle requests.
+    Returns 200 if ready, 503 if not ready.
     
     Args:
         service: OCR service instance
-        config: Application configuration
         
     Returns:
-        Dict with health status, version, model info, and configuration limits
+        Dict with readiness status
     """
-    return {
-        "ok": True,
-        "version": config.version,
-        "environment": config.environment,
-        "model": {
-            "name": config.model_name,
-            "loaded": service._model_loaded,
-            "device": config.device,
-        },
-        "configuration": {
-            "max_file_size_mb": config.max_file_size_mb,
-            "max_pdf_pages": config.max_pdf_pages,
-            "pdf_dpi": config.pdf_dpi,
-        },
-    }
+    from fastapi import Response
+    from fastapi.responses import JSONResponse
+    
+    is_ready = service._model_loaded and service.model is not None
+    
+    if is_ready:
+        return {"ok": True, "model_loaded": True}
+    else:
+        return JSONResponse(
+            status_code=503,
+            content={"ok": False, "model_loaded": False, "reason": "Model not loaded"}
+        )
+
+
+@router.get(
+    "/health/live",
+    response_model=HealthResponse,
+    summary="Liveness probe",
+    description="Kubernetes-style liveness probe. Returns 200 if service is alive and responding.",
+    responses={
+        200: {
+            "description": "Service is alive",
+            "content": {
+                "application/json": {
+                    "example": {"ok": True}
+                }
+            }
+        }
+    },
+    response_description="Liveness status"
+)
+async def liveness_check() -> HealthResponse:
+    """
+    Liveness probe for Kubernetes deployments.
+    
+    Simple endpoint that returns 200 if the service is alive and responding.
+    
+    Returns:
+        HealthResponse: Basic status indicator
+    """
+    return HealthResponse(ok=True)
 

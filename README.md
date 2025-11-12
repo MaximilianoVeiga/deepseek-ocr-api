@@ -226,6 +226,15 @@ Configuration is managed through environment variables. Copy `env.example` to `.
 |----------|---------|-------------|
 | `LOG_LEVEL` | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) |
 
+### Security
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `API_KEY_ENABLED` | `false` | Enable API key authentication |
+| `API_KEY` | `""` | API key for authentication (required if enabled) |
+| `RATE_LIMIT_PER_MINUTE` | `60` | Maximum requests per minute per IP |
+| `PROMPT_MAX_LENGTH` | `2000` | Maximum length for OCR prompts |
+
 ## Usage
 
 ### Image OCR
@@ -244,7 +253,9 @@ curl -X POST http://localhost:3000/ocr/image \
   "success": true,
   "text": "# Invoice\n\n**Invoice Number:** INV-001...",
   "filename": "invoice.jpg",
-  "processing_time_seconds": 2.35
+  "processing_time_seconds": 2.35,
+  "model_version": "deepseek-ai/DeepSeek-OCR",
+  "correlation_id": "abc123-def456"
 }
 ```
 
@@ -273,17 +284,22 @@ curl -X POST http://localhost:3000/ocr/pdf \
     {
       "page_number": 1,
       "text": "# Contract Agreement\n\n**Date:** 2024-01-15...",
-      "processing_time_seconds": 2.10
+      "processing_time_seconds": 2.10,
+      "success": true
     },
     {
       "page_number": 2,
       "text": "## Terms and Conditions\n\n1. Payment terms...",
-      "processing_time_seconds": 2.05
+      "processing_time_seconds": 2.05,
+      "success": true
     }
   ],
   "total_pages": 2,
   "filename": "contract.pdf",
-  "total_processing_time_seconds": 4.15
+  "total_processing_time_seconds": 4.15,
+  "model_version": "deepseek-ai/DeepSeek-OCR",
+  "correlation_id": "xyz789-abc123",
+  "warnings": []
 }
 ```
 
@@ -389,14 +405,13 @@ The API provides interactive documentation powered by FastAPI:
   curl http://localhost:3000/health
   ```
 
-- **`GET /health/detailed`** - Detailed system and model information
-  ```bash
-  curl http://localhost:3000/health/detailed
-  ```
-
 #### OCR Processing
 - **`POST /ocr/image`** - Process image files
 - **`POST /ocr/pdf`** - Process PDF files
+
+#### Kubernetes Health Probes
+- **`GET /health/ready`** - Readiness probe (returns 200 when model is loaded)
+- **`GET /health/live`** - Liveness probe (returns 200 when service is responsive)
 
 ### Interactive Documentation
 

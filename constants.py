@@ -32,6 +32,16 @@ MAX_PORT: Final[int] = 65535
 # OCR defaults
 DEFAULT_OCR_PROMPT: Final[str] = "<image>\n<|grounding|>Convert the document to markdown."
 
+# Output format prompts
+OUTPUT_FORMAT_PROMPTS: Final[dict[str, str]] = {
+    "markdown": "<image>\n<|grounding|>Convert the document to markdown format with proper headers, lists, tables, and formatting.",
+    "text": "<image>\n<|grounding|>Extract all text from the document as plain text without any formatting or structure.",
+    "table": "<image>\n<|grounding|>Extract and format all tables from the document. Preserve table structure and data accurately.",
+    "figure": "<image>\n<|grounding|>Identify and extract all figures, charts, and images. Provide captions, descriptions, and any associated text.",
+    "json": "<image>\n<|grounding|>Extract all information from the document and output it as structured JSON data with appropriate key-value pairs.",
+    "structured_data": "<image>\n<|grounding|>Extract structured information from the document including fields, labels, and values in a clear key-value format.",
+}
+
 # CORS defaults
 DEFAULT_CORS_ORIGINS: Final[list[str]] = ["*"]
 
