@@ -1,49 +1,18 @@
 # -*- coding: utf-8 -*-
 """OCR service with model inference logic."""
-import os
-import warnings
-from typing import Optional
-from pathlib import Path
-import contextlib
-import io
-import asyncio
+from typing import Optional, Tuple, List, Dict
 from concurrent.futures import ThreadPoolExecutor
-import fitz  # PyMuPDF
-from transformers import AutoModel, AutoTokenizer
-import torch
 
 from config import Config, get_config
 from logger import get_logger
-from models import (
-    OCRProcessingError,
-    FileSizeLimitError,
-    PDFPageLimitError,
-    validate_image_file,
-    validate_pdf_file,
-)
-from utils import temporary_file
-from constants import (
-    ERROR_MODEL_NOT_LOADED,
-    ERROR_MODEL_LOAD_FAILED,
-    ERROR_IMAGE_INFERENCE_FAILED,
-    ERROR_PDF_PROCESSING_FAILED,
-    LOG_MODEL_LOADING,
-    LOG_MODEL_LOADED,
-    LOG_MODEL_ALREADY_LOADED,
-    LOG_MODEL_LOAD_FAILED,
-    LOG_PROCESSING_IMAGE,
-    LOG_IMAGE_PROCESSED,
-    LOG_PROCESSING_PDF,
-    LOG_PDF_PAGE_COUNT,
-    LOG_PROCESSING_PAGE,
-    LOG_PAGE_FAILED,
-    LOG_PDF_PROCESSED,
-    COMPONENT_STARTUP,
-    COMPONENT_OCR,
-    COMPONENT_OCR_SERVICE,
-    DEVICE_CUDA,
-    DEVICE_CPU,
-)
+from models import OCRProcessingError
+from constants import ERROR_MODEL_NOT_LOADED, COMPONENT_OCR_SERVICE
+
+from .model_loader import ModelLoader
+from .text_cleaner import TextCleaner
+from .inference_engine import InferenceEngine
+from .image_processor import ImageProcessor
+from .pdf_processor import PDFProcessor
 
 
 class OCRService:
@@ -63,12 +32,31 @@ class OCRService:
         """
         self.config = config or get_config()
         self.logger = get_logger(version=self.config.version)
-        self.model: Optional[AutoModel] = None
-        self.tokenizer: Optional[AutoTokenizer] = None
-        self._model_loaded = False
+        
         # Thread pool for running synchronous model inference
         # Use 1 worker to avoid GPU concurrency issues
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ocr-inference")
+        
+        # Initialize components
+        self.model_loader = ModelLoader(self.config, self.logger)
+        self.text_cleaner = TextCleaner(self.logger)
+        self.inference_engine = InferenceEngine(
+            self.config,
+            self.logger,
+            self.text_cleaner
+        )
+        self.image_processor = ImageProcessor(
+            self.config,
+            self.logger,
+            self.inference_engine,
+            self._executor
+        )
+        self.pdf_processor = PDFProcessor(
+            self.config,
+            self.logger,
+            self.inference_engine,
+            self._executor
+        )
     
     def load_model(self) -> None:
         """
@@ -77,397 +65,12 @@ class OCRService:
         Raises:
             OCRProcessingError: If model loading fails
         """
-        if self._model_loaded:
-            self.logger.info(
-                LOG_MODEL_ALREADY_LOADED,
-                component=COMPONENT_OCR_SERVICE
-            )
-            return
-        
-        try:
-            self.logger.info(
-                LOG_MODEL_LOADING.format(model_name=self.config.model_name),
-                component=COMPONENT_STARTUP,
-                model=self.config.model_name,
-                device=self.config.device
-            )
-            
-            # Suppress expected warnings during model loading
-            warnings.filterwarnings("ignore", message="You are using a model of type")
-            warnings.filterwarnings("ignore", message="Some weights of.*were not initialized")
-            
-            try:
-                self.tokenizer = AutoTokenizer.from_pretrained(
-                    self.config.model_name,
-                    trust_remote_code=True
-                )
-                
-                # Load model and move to appropriate device
-                self.model = AutoModel.from_pretrained(
-                    self.config.model_name,
-                    trust_remote_code=True,
-                    use_safetensors=True
-                ).eval()
-            finally:
-                # Reset warning filters
-                warnings.resetwarnings()
-            
-            # Move model to device
-            if self.config.device == DEVICE_CUDA:
-                self.model = self.model.cuda().to(torch.bfloat16)
-            elif self.config.device == DEVICE_CPU:
-                self.model = self.model.cpu()
-            else:
-                # MPS or other devices
-                self.model = self.model.to(self.config.device)
-            
-            self._model_loaded = True
-            self.logger.info(
-                LOG_MODEL_LOADED,
-                component=COMPONENT_STARTUP,
-                model=self.config.model_name,
-                device=self.config.device
-            )
-            
-        except Exception as e:
-            self.logger.error(
-                LOG_MODEL_LOAD_FAILED,
-                component=COMPONENT_STARTUP,
-                exc_info=e,
-                model=self.config.model_name
-            )
-            raise OCRProcessingError(
-                ERROR_MODEL_LOAD_FAILED.format(error=str(e)),
-                original_error=e
-            )
+        self.model_loader.load_model()
     
     def _ensure_model_loaded(self) -> None:
         """Ensure model is loaded before inference."""
-        if not self._model_loaded or self.model is None or self.tokenizer is None:
+        if not self.model_loader.is_loaded():
             raise OCRProcessingError(ERROR_MODEL_NOT_LOADED)
-    
-    async def _infer_image_async(self, image_path: str, prompt: str, strip_grounding: bool = True) -> str:
-        """
-        Async wrapper around synchronous _infer_image method.
-        
-        Runs the synchronous model inference in a thread pool to avoid
-        blocking the async event loop.
-        
-        Args:
-            image_path: Path to image file
-            prompt: OCR prompt
-            strip_grounding: Whether to strip grounding annotations (default: True)
-            
-        Returns:
-            str: Extracted text
-            
-        Raises:
-            OCRProcessingError: If inference fails
-        """
-        # Run synchronous inference in thread pool
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            self._executor,
-            self._infer_image,
-            image_path,
-            prompt,
-            strip_grounding
-        )
-    
-    def _strip_grounding_annotations(self, text: str) -> str:
-        """
-        Strip grounding annotations from OCR output.
-        
-        Removes reference tags (<|ref|>...<|/ref|>) and detection bounding boxes
-        (<|det|>[[...]]<|/det|>) to produce clean text output.
-        
-        Args:
-            text: Text with grounding annotations
-            
-        Returns:
-            str: Clean text without annotations
-        """
-        import re
-        
-        if not text:
-            return ""
-        
-        # Remove reference tags: <|ref|>type<|/ref|>
-        text = re.sub(r'<\|ref\|>.*?<\|/ref\|>', '', text)
-        
-        # Remove detection bounding boxes: <|det|>[[x1, y1, x2, y2]]<|/det|>
-        text = re.sub(r'<\|det\|>\[\[.*?\]\]<\|/det\|>', '', text)
-        
-        # Clean up multiple consecutive newlines (more than 2)
-        text = re.sub(r'\n{3,}', '\n\n', text)
-        
-        # Clean up spaces at the start of lines
-        lines = text.split('\n')
-        cleaned_lines = [line.strip() if line.strip() else '' for line in lines]
-        text = '\n'.join(cleaned_lines)
-        
-        # Remove leading/trailing whitespace
-        text = text.strip()
-        
-        return text
-    
-    def _clean_stdout_output(self, stdout_text: str, strip_grounding: bool = True) -> str:
-        """
-        Clean captured stdout to extract OCR text.
-        
-        Filters out debug messages and extracts the actual OCR content.
-        Optionally strips grounding annotations for clean output.
-        
-        Args:
-            stdout_text: Raw captured stdout
-            strip_grounding: Whether to strip grounding annotations (default: True)
-            
-        Returns:
-            str: Cleaned OCR text
-        """
-        if not stdout_text:
-            return ""
-        
-        lines = stdout_text.strip().split('\n')
-        cleaned_lines = []
-        
-        for line in lines:
-            # Skip debug lines and noise
-            if any([
-                line.startswith('====='),
-                line.startswith('BASE:'),
-                line.startswith('PATCHES:'),
-                line.strip() == '(0x0)',
-                line.strip().startswith('(0x0)') and len(line.strip()) < 50,
-                line.strip() == '0x0',
-                'torch.Size' in line,
-            ]):
-                continue
-            
-            # Keep actual content
-            if line.strip():
-                cleaned_lines.append(line)
-        
-        result = '\n'.join(cleaned_lines)
-        
-        # Strip grounding annotations if requested
-        if strip_grounding:
-            result = self._strip_grounding_annotations(result)
-        
-        return result
-    
-    def _run_model_inference(
-        self,
-        image_path: str,
-        prompt: str,
-        output_path: str,
-        save_results: bool = False
-    ) -> tuple[any, str]:
-        """
-        Run model inference and capture output.
-        
-        Args:
-            image_path: Path to image file
-            prompt: OCR prompt
-            output_path: Path for model output files
-            save_results: Whether to save results to file
-            
-        Returns:
-            tuple: (model result, captured stdout)
-        """
-        stdout_capture = io.StringIO()
-        result = None
-        
-        with contextlib.redirect_stdout(stdout_capture):
-            result = self.model.infer(
-                self.tokenizer,
-                prompt=prompt,
-                image_file=image_path,
-                output_path=output_path,
-                base_size=self.config.base_size,
-                image_size=self.config.image_size,
-                crop_mode=True,
-                save_results=save_results,
-                test_compress=False,
-            )
-        
-        stdout_text = stdout_capture.getvalue()
-        return result, stdout_text
-    
-    def _extract_text_from_result(self, result: any) -> Optional[str]:
-        """
-        Extract text from model inference result.
-        
-        Args:
-            result: Model inference result
-            
-        Returns:
-            Optional[str]: Extracted text, or None if not found
-        """
-        if isinstance(result, str) and result:
-            return result
-        elif isinstance(result, dict):
-            # Check for common keys that might contain the text
-            for key in ['text', 'output', 'result', 'prediction']:
-                if key in result and result[key]:
-                    return str(result[key])
-            self.logger.warning(
-                f"Dict returned but no text found. Keys: {list(result.keys())}",
-                component=COMPONENT_OCR_SERVICE
-            )
-        elif isinstance(result, list) and result:
-            # If list, concatenate all string elements
-            text = "\n".join(str(item) for item in result if item)
-            if text:
-                return text
-        return None
-    
-    def _try_read_output_files(self, output_path: str, strip_grounding: bool = True) -> Optional[str]:
-        """
-        Try to read OCR results from output files.
-        
-        Args:
-            output_path: Directory containing output files
-            strip_grounding: Whether to strip grounding annotations (default: True)
-            
-        Returns:
-            Optional[str]: Text from output files, or None if not found
-        """
-        output_files = list(Path(output_path).glob("*.txt")) + \
-                      list(Path(output_path).glob("*.md"))
-        
-        if output_files:
-            output_file = output_files[0]
-            self.logger.info(
-                f"Reading result from file: {output_file}",
-                component=COMPONENT_OCR_SERVICE
-            )
-            with open(output_file, "r", encoding="utf-8") as f:
-                text = f.read()
-                # Apply grounding stripping if requested
-                if strip_grounding:
-                    text = self._strip_grounding_annotations(text)
-                return text
-        return None
-    
-    def _infer_image(
-        self,
-        image_path: str,
-        prompt: str,
-        strip_grounding: bool = True
-    ) -> str:
-        """
-        Perform OCR inference on a single image.
-        
-        Args:
-            image_path: Path to image file
-            prompt: OCR prompt
-            strip_grounding: Whether to strip grounding annotations (default: True)
-            
-        Returns:
-            str: Extracted text
-            
-        Raises:
-            OCRProcessingError: If inference fails
-        """
-        self._ensure_model_loaded()
-        
-        try:
-            # Create a temporary directory for model output
-            import tempfile
-            import shutil
-            temp_output_dir = tempfile.mkdtemp(prefix="dsocr-output-")
-            
-            try:
-                self.logger.info(
-                    f"Calling model.infer with prompt: {prompt[:100]}...",
-                    component=COMPONENT_OCR_SERVICE
-                )
-                
-                # Run model inference
-                result, stdout_text = self._run_model_inference(
-                    image_path, prompt, temp_output_dir, save_results=False
-                )
-                
-                # Log what we got back
-                self.logger.info(
-                    f"Model returned type: {type(result)}, stdout length: {len(stdout_text)} chars",
-                    component=COMPONENT_OCR_SERVICE
-                )
-                
-                # Priority 1: Try to extract text from captured stdout
-                if stdout_text:
-                    cleaned_text = self._clean_stdout_output(stdout_text, strip_grounding)
-                    if cleaned_text:
-                        self.logger.info(
-                            f"Extracted text from stdout ({len(cleaned_text)} chars)",
-                            component=COMPONENT_OCR_SERVICE
-                        )
-                        return cleaned_text
-                
-                # Priority 2: Check if result has text
-                extracted_text = self._extract_text_from_result(result)
-                if extracted_text:
-                    # Apply grounding stripping if requested
-                    if strip_grounding:
-                        extracted_text = self._strip_grounding_annotations(extracted_text)
-                    return extracted_text
-                
-                # Priority 3: Try saving results to file as fallback
-                self.logger.info(
-                    "No text from stdout or result, trying with save_results=True",
-                    component=COMPONENT_OCR_SERVICE
-                )
-                
-                _, stdout_text2 = self._run_model_inference(
-                    image_path, prompt, temp_output_dir, save_results=True
-                )
-                
-                # Try stdout from second call
-                if stdout_text2:
-                    cleaned_text2 = self._clean_stdout_output(stdout_text2, strip_grounding)
-                    if cleaned_text2:
-                        self.logger.info(
-                            f"Extracted text from fallback stdout ({len(cleaned_text2)} chars)",
-                            component=COMPONENT_OCR_SERVICE
-                        )
-                        return cleaned_text2
-                
-                # Look for output files
-                file_text = self._try_read_output_files(temp_output_dir, strip_grounding)
-                if file_text:
-                    return file_text
-                
-                # Nothing worked
-                self.logger.warning(
-                    "Unable to extract text from model inference",
-                    component=COMPONENT_OCR_SERVICE
-                )
-                return ""
-                
-            finally:
-                # Clean up temporary output directory
-                try:
-                    if os.path.exists(temp_output_dir):
-                        shutil.rmtree(temp_output_dir)
-                except Exception as cleanup_error:
-                    self.logger.warning(
-                        f"Failed to clean up temporary output directory: {temp_output_dir}",
-                        component=COMPONENT_OCR_SERVICE,
-                        exc_info=cleanup_error
-                    )
-            
-        except Exception as e:
-            self.logger.error(
-                "Image inference failed",
-                component=COMPONENT_OCR_SERVICE,
-                exc_info=e,
-                image_path=image_path
-            )
-            raise OCRProcessingError(
-                ERROR_IMAGE_INFERENCE_FAILED.format(error=str(e)),
-                original_error=e
-            )
     
     async def process_image(
         self,
@@ -475,7 +78,7 @@ class OCRService:
         filename: str,
         prompt: str,
         strip_grounding: bool = True
-    ) -> tuple[str, float]:
+    ) -> Tuple[str, float]:
         """
         Process an image file and extract text.
         
@@ -493,59 +96,16 @@ class OCRService:
             FileSizeLimitError: If file size exceeds limit
             OCRProcessingError: If OCR processing fails
         """
-        import time
+        self._ensure_model_loaded()
         
-        start_time = time.perf_counter()
-        
-        # Validate file
-        validate_image_file(filename)
-        
-        # Check file size
-        if len(file_content) > self.config.max_file_size_bytes:
-            raise FileSizeLimitError(
-                len(file_content),
-                self.config.max_file_size_bytes
-            )
-        
-        self.logger.info(
-            LOG_PROCESSING_IMAGE.format(filename=filename),
-            component=COMPONENT_OCR,
-            filename=filename,
-            size_kb=len(file_content) // 1024
+        return await self.image_processor.process_image(
+            self.model_loader.get_model(),
+            self.model_loader.get_tokenizer(),
+            file_content,
+            filename,
+            prompt,
+            strip_grounding
         )
-        
-        # Get file extension
-        suffix = os.path.splitext(filename)[1] or ".png"
-        
-        # Process image
-        with temporary_file(suffix=suffix, logger=self.logger) as tmp_path:
-            # Write file content
-            with open(tmp_path, "wb") as f:
-                f.write(file_content)
-            
-            # Perform OCR asynchronously
-            text = await self._infer_image_async(tmp_path, prompt, strip_grounding)
-        
-        processing_time = time.perf_counter() - start_time
-        
-        self.logger.info(
-            LOG_IMAGE_PROCESSED.format(filename=filename),
-            component=COMPONENT_OCR,
-            filename=filename,
-            text_length=len(text),
-            processing_time_seconds=processing_time
-        )
-        
-        # Log response text preview
-        text_preview = text[:500] if len(text) > 500 else text
-        self.logger.info(
-            f"OCR response text (preview): {text_preview}{'...' if len(text) > 500 else ''}",
-            component=COMPONENT_OCR,
-            filename=filename,
-            full_text_length=len(text)
-        )
-        
-        return text, processing_time
     
     async def process_pdf(
         self,
@@ -553,7 +113,7 @@ class OCRService:
         filename: str,
         prompt: str,
         strip_grounding: bool = True
-    ) -> tuple[list[dict], list[str]]:
+    ) -> Tuple[List[Dict], List[str]]:
         """
         Process a PDF file page by page and extract text.
         
@@ -573,132 +133,16 @@ class OCRService:
             PDFPageLimitError: If PDF has too many pages
             OCRProcessingError: If OCR processing fails
         """
-        import time
+        self._ensure_model_loaded()
         
-        # Validate file
-        validate_pdf_file(filename)
-        
-        # Check file size
-        if len(file_content) > self.config.max_file_size_bytes:
-            raise FileSizeLimitError(
-                len(file_content),
-                self.config.max_file_size_bytes
-            )
-        
-        self.logger.info(
-            LOG_PROCESSING_PDF.format(filename=filename),
-            component=COMPONENT_OCR,
-            filename=filename,
-            size_kb=len(file_content) // 1024
+        return await self.pdf_processor.process_pdf(
+            self.model_loader.get_model(),
+            self.model_loader.get_tokenizer(),
+            file_content,
+            filename,
+            prompt,
+            strip_grounding
         )
-        
-        # Process PDF
-        page_results = []
-        warnings = []
-        
-        with temporary_file(suffix=".pdf", logger=self.logger) as pdf_path:
-            # Write PDF content
-            with open(pdf_path, "wb") as f:
-                f.write(file_content)
-            
-            # Open PDF and check page count
-            try:
-                doc = fitz.open(pdf_path)
-                page_count = doc.page_count
-                
-                if page_count > self.config.max_pdf_pages:
-                    doc.close()
-                    raise PDFPageLimitError(page_count, self.config.max_pdf_pages)
-                
-                self.logger.info(
-                    LOG_PDF_PAGE_COUNT.format(page_count=page_count),
-                    component=COMPONENT_OCR,
-                    filename=filename,
-                    page_count=page_count
-                )
-                
-                # Process each page
-                for i in range(page_count):
-                    page_start_time = time.perf_counter()
-                    page_num = i + 1
-                    
-                    self.logger.info(
-                        LOG_PROCESSING_PAGE.format(page=page_num, total_pages=page_count),
-                        component=COMPONENT_OCR,
-                        filename=filename,
-                        page=page_num,
-                        total_pages=page_count
-                    )
-                    
-                    try:
-                        page = doc.load_page(i)
-                        pix = page.get_pixmap(dpi=self.config.pdf_dpi)
-                        
-                        # Save page as image and process
-                        with temporary_file(suffix=".png", logger=self.logger) as img_path:
-                            pix.save(img_path)
-                            
-                            text = await self._infer_image_async(img_path, prompt, strip_grounding)
-                            page_time = time.perf_counter() - page_start_time
-                            
-                            page_results.append({
-                                "page_number": page_num,
-                                "text": text.strip() if text else "",
-                                "processing_time_seconds": round(page_time, 2),
-                                "success": True,
-                                "error": None
-                            })
-                    
-                    except Exception as e:
-                        page_time = time.perf_counter() - page_start_time
-                        error_msg = f"Failed to process page {page_num}: {str(e)}"
-                        
-                        self.logger.error(
-                            LOG_PAGE_FAILED.format(page=page_num),
-                            component=COMPONENT_OCR,
-                            exc_info=e,
-                            filename=filename,
-                            page=page_num
-                        )
-                        
-                        warnings.append(error_msg)
-                        page_results.append({
-                            "page_number": page_num,
-                            "text": "",
-                            "processing_time_seconds": round(page_time, 2),
-                            "success": False,
-                            "error": error_msg
-                        })
-                
-                doc.close()
-                
-            except PDFPageLimitError:
-                raise
-            except Exception as e:
-                self.logger.error(
-                    "PDF processing failed",
-                    component=COMPONENT_OCR,
-                    exc_info=e,
-                    filename=filename
-                )
-                raise OCRProcessingError(
-                    ERROR_PDF_PROCESSING_FAILED.format(error=str(e)),
-                    original_error=e
-                )
-        
-        successful_pages = sum(1 for p in page_results if p["success"])
-        total_text_length = sum(len(p["text"]) for p in page_results)
-        
-        self.logger.info(
-            LOG_PDF_PROCESSED.format(filename=filename),
-            component=COMPONENT_OCR,
-            filename=filename,
-            pages_processed=successful_pages,
-            total_pages=len(page_results),
-            text_length=total_text_length
-        )
-        
-        return page_results, warnings
     
     def shutdown(self) -> None:
         """
@@ -729,4 +173,3 @@ def get_ocr_service(config: Optional[Config] = None) -> OCRService:
         OCRService: OCR service instance
     """
     return OCRService(config=config)
-

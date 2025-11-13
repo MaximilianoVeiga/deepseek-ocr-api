@@ -15,6 +15,10 @@ from constants import (
     DEFAULT_BASE_SIZE,
     DEFAULT_IMAGE_SIZE,
     DEFAULT_PDF_DPI,
+    DEFAULT_ENABLE_COMPRESSION,
+    DEFAULT_MAX_IMAGE_DIMENSION,
+    DEFAULT_JPEG_QUALITY,
+    DEFAULT_PNG_COMPRESSION,
     DEFAULT_MAX_FILE_SIZE_MB,
     DEFAULT_MAX_PDF_PAGES,
     DEFAULT_OCR_PROMPT,
@@ -83,6 +87,24 @@ class Config(BaseModel):
     base_size: int = Field(default=DEFAULT_BASE_SIZE, description="Base image size for OCR")
     image_size: int = Field(default=DEFAULT_IMAGE_SIZE, description="Image size for OCR")
     pdf_dpi: int = Field(default=DEFAULT_PDF_DPI, description="DPI for PDF rasterization")
+    
+    # Image compression configuration
+    enable_compression: bool = Field(
+        default=DEFAULT_ENABLE_COMPRESSION,
+        description="Enable image compression for performance"
+    )
+    max_image_dimension: int = Field(
+        default=DEFAULT_MAX_IMAGE_DIMENSION,
+        description="Maximum image dimension (width/height) before resizing"
+    )
+    jpeg_quality: int = Field(
+        default=DEFAULT_JPEG_QUALITY,
+        description="JPEG compression quality (1-100)"
+    )
+    png_compression: int = Field(
+        default=DEFAULT_PNG_COMPRESSION,
+        description="PNG compression level (0-9)"
+    )
     
     # File limits
     max_file_size_mb: int = Field(default=DEFAULT_MAX_FILE_SIZE_MB, description="Maximum file size in MB")
@@ -196,6 +218,10 @@ def load_config() -> Config:
         base_size=int(os.getenv("BASE_SIZE", str(DEFAULT_BASE_SIZE))),
         image_size=int(os.getenv("IMAGE_SIZE", str(DEFAULT_IMAGE_SIZE))),
         pdf_dpi=int(os.getenv("PDF_DPI", str(DEFAULT_PDF_DPI))),
+        enable_compression=os.getenv("ENABLE_COMPRESSION", str(DEFAULT_ENABLE_COMPRESSION)).lower() in ("true", "1", "yes"),
+        max_image_dimension=int(os.getenv("MAX_IMAGE_DIMENSION", str(DEFAULT_MAX_IMAGE_DIMENSION))),
+        jpeg_quality=int(os.getenv("JPEG_QUALITY", str(DEFAULT_JPEG_QUALITY))),
+        png_compression=int(os.getenv("PNG_COMPRESSION", str(DEFAULT_PNG_COMPRESSION))),
         max_file_size_mb=int(os.getenv("MAX_FILE_SIZE_MB", str(DEFAULT_MAX_FILE_SIZE_MB))),
         max_pdf_pages=int(os.getenv("MAX_PDF_PAGES", str(DEFAULT_MAX_PDF_PAGES))),
         cors_origins=os.getenv("CORS_ORIGINS", "*").split(","),

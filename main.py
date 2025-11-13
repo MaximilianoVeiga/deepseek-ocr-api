@@ -6,6 +6,7 @@ This is a simple entry point that initializes the application
 and starts the server.
 """
 import sys
+import os
 from typing import NoReturn
 import uvicorn
 
@@ -37,6 +38,10 @@ def main() -> None:
     # Load configuration
     config = get_config()
     logger = get_logger(version=config.version)
+    
+    # Configure transformers library verbosity to reduce unnecessary logging
+    transformers_verbosity = os.getenv("TRANSFORMERS_VERBOSITY", "error")
+    os.environ["TRANSFORMERS_VERBOSITY"] = transformers_verbosity
     
     # Log startup
     logger.info(

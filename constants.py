@@ -17,6 +17,12 @@ DEFAULT_BASE_SIZE: Final[int] = 1024
 DEFAULT_IMAGE_SIZE: Final[int] = 640
 DEFAULT_PDF_DPI: Final[int] = 220
 
+# Image compression defaults
+DEFAULT_ENABLE_COMPRESSION: Final[bool] = True
+DEFAULT_MAX_IMAGE_DIMENSION: Final[int] = 2048
+DEFAULT_JPEG_QUALITY: Final[int] = 85
+DEFAULT_PNG_COMPRESSION: Final[int] = 6
+
 # File processing limits
 DEFAULT_MAX_FILE_SIZE_MB: Final[int] = 50
 DEFAULT_MAX_PDF_PAGES: Final[int] = 100
@@ -30,7 +36,7 @@ MIN_PORT: Final[int] = 1
 MAX_PORT: Final[int] = 65535
 
 # OCR defaults
-DEFAULT_OCR_PROMPT: Final[str] = "<image>\n<|grounding|>Convert the document to markdown."
+DEFAULT_OCR_PROMPT: Final[str] = "<image>\n<|grounding|>Convert the document to markdown format with proper headers, lists, tables, and formatting."
 
 # Output format prompts
 OUTPUT_FORMAT_PROMPTS: Final[dict[str, str]] = {

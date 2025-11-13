@@ -209,7 +209,7 @@ Configuration is managed through environment variables. Copy `env.example` to `.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DEFAULT_PROMPT` | `<image>\n<\|grounding\|>Convert...` | Default OCR prompt |
+| `DEFAULT_PROMPT` | `<image>\n<\|grounding\|>Convert the document to markdown format with proper headers, lists, tables, and formatting.` | Default OCR prompt |
 | `PDF_DPI` | `220` | DPI for PDF to image conversion |
 | `MAX_FILE_SIZE_MB` | `50` | Maximum upload file size |
 | `MAX_PDF_PAGES` | `100` | Maximum pages per PDF |
@@ -366,7 +366,7 @@ Different prompts for different use cases:
 #### Document to Markdown (Default)
 ```
 <image>
-<|grounding|>Convert the document to markdown.
+<|grounding|>Convert the document to markdown format with proper headers, lists, tables, and formatting.
 ```
 
 #### Simple OCR (No Layout)

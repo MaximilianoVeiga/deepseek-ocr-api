@@ -80,7 +80,7 @@ async def readiness_check(
     from fastapi import Response
     from fastapi.responses import JSONResponse
     
-    is_ready = service._model_loaded and service.model is not None
+    is_ready = service.model_loader.is_loaded()
     
     if is_ready:
         return {"ok": True, "model_loaded": True}
