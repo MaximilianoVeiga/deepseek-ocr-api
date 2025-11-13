@@ -27,7 +27,7 @@ router = APIRouter(prefix="/ocr", tags=["ocr"])
                         "text": "# Invoice #12345\n\n**Date:** November 10, 2024\n\n| Item | Quantity | Price |\n|------|----------|-------|\n| Widget A | 2 | $50.00 |\n| Widget B | 1 | $75.00 |\n\n**Total:** $175.00",
                         "filename": "invoice.jpg",
                         "processing_time_seconds": 2.35,
-                        "model_version": "deepseek-ai/DeepSeek-OCR",
+                        "model_version": "unsloth/DeepSeek-OCR",
                         "correlation_id": "abc123-def456"
                     }
                 }
@@ -143,7 +143,7 @@ async def ocr_image(
                         "total_pages": 2,
                         "filename": "contract.pdf",
                         "total_processing_time_seconds": 4.15,
-                        "model_version": "deepseek-ai/DeepSeek-OCR",
+                        "model_version": "unsloth/DeepSeek-OCR",
                         "correlation_id": "xyz789-abc123",
                         "warnings": []
                     }

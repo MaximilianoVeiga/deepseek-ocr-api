@@ -22,8 +22,8 @@ Write-Host "[install-deps] Upgrading pip..." -ForegroundColor Yellow
 python -m pip install --upgrade pip
 
 # Install PyTorch with CUDA support first
-Write-Host "[install-deps] Installing PyTorch with CUDA 11.8 support..." -ForegroundColor Yellow
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+Write-Host "[install-deps] Installing PyTorch with CUDA 13.0 support..." -ForegroundColor Yellow
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
 
 # Install all dependencies from requirements.txt
 Write-Host "[install-deps] Installing dependencies from requirements.txt..." -ForegroundColor Yellow

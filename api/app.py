@@ -66,7 +66,7 @@ def create_app(
         openapi_tags=TAGS_METADATA,
         contact={
             "name": "DeepSeek-OCR API",
-            "url": "https://github.com/deepseek-ai/DeepSeek-OCR",
+            "url": "https://huggingface.co/unsloth/DeepSeek-OCR",
         },
         license_info={
             "name": "MIT License",

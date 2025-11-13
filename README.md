@@ -200,7 +200,7 @@ Configuration is managed through environment variables. Copy `env.example` to `.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DS_OCR_MODEL` | `deepseek-ai/DeepSeek-OCR` | HuggingFace model identifier |
+| `DS_OCR_MODEL` | `unsloth/DeepSeek-OCR` | HuggingFace model identifier |
 | `DEVICE` | `auto` | Device for inference (`auto`, `cuda`, `mps`, `cpu`) |
 | `BASE_SIZE` | `1024` | Base size for model processing |
 | `IMAGE_SIZE` | `640` | Image preprocessing size |
@@ -254,7 +254,7 @@ curl -X POST http://localhost:3000/ocr/image \
   "text": "# Invoice\n\n**Invoice Number:** INV-001...",
   "filename": "invoice.jpg",
   "processing_time_seconds": 2.35,
-  "model_version": "deepseek-ai/DeepSeek-OCR",
+  "model_version": "unsloth/DeepSeek-OCR",
   "correlation_id": "abc123-def456"
 }
 ```
@@ -297,7 +297,7 @@ curl -X POST http://localhost:3000/ocr/pdf \
   "total_pages": 2,
   "filename": "contract.pdf",
   "total_processing_time_seconds": 4.15,
-  "model_version": "deepseek-ai/DeepSeek-OCR",
+  "model_version": "unsloth/DeepSeek-OCR",
   "correlation_id": "xyz789-abc123",
   "warnings": []
 }
@@ -600,7 +600,7 @@ pytest -m integration
 3. Manually download model:
    ```python
    from transformers import AutoModel
-   AutoModel.from_pretrained("deepseek-ai/DeepSeek-OCR")
+   AutoModel.from_pretrained("unsloth/DeepSeek-OCR")
    ```
 
 #### Port Already in Use

@@ -12,7 +12,7 @@ DEFAULT_HOST: Final[str] = "0.0.0.0"
 DEFAULT_PORT: Final[int] = 3000
 
 # Model defaults
-DEFAULT_MODEL_NAME: Final[str] = "deepseek-ai/DeepSeek-OCR"
+DEFAULT_MODEL_NAME: Final[str] = "unsloth/DeepSeek-OCR"
 DEFAULT_BASE_SIZE: Final[int] = 1024
 DEFAULT_IMAGE_SIZE: Final[int] = 640
 DEFAULT_PDF_DPI: Final[int] = 220

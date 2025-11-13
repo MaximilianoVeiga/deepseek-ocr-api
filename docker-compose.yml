@@ -11,7 +11,7 @@ services:
           devices:
             - capabilities: [gpu]
     environment:
-      - DS_OCR_MODEL=deepseek-ai/DeepSeek-OCR
+      - DS_OCR_MODEL=unsloth/DeepSeek-OCR
       - PORT=3000
     ports:
       - '3000:3000'
