@@ -23,6 +23,13 @@ DEFAULT_MAX_IMAGE_DIMENSION: Final[int] = 2048
 DEFAULT_JPEG_QUALITY: Final[int] = 85
 DEFAULT_PNG_COMPRESSION: Final[int] = 6
 
+# Performance optimization defaults
+DEFAULT_ENABLE_TORCH_COMPILE: Final[bool] = True
+DEFAULT_ENABLE_CUDA_WARMUP: Final[bool] = True
+DEFAULT_USE_MEMORY_PROCESSING: Final[bool] = True
+DEFAULT_MEMORY_PROCESSING_MAX_SIZE_MB: Final[int] = 10
+DEFAULT_LOG_LEVEL: Final[str] = "info"
+
 # File processing limits
 DEFAULT_MAX_FILE_SIZE_MB: Final[int] = 50
 DEFAULT_MAX_PDF_PAGES: Final[int] = 100

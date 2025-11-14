@@ -155,20 +155,36 @@ class ImageProcessor:
         # Get file extension
         suffix = os.path.splitext(filename)[1] or ".png"
         
+        # Optimize I/O for small files using in-memory processing
+        use_memory_processing = (
+            self.config.use_memory_processing and 
+            self.image_compressor and
+            len(file_content) <= self.config.memory_processing_max_size_bytes
+        )
+        
         # Process image
-        with temporary_file(suffix=suffix, logger=self.logger) as tmp_path:
-            # Write file content
-            with open(tmp_path, "wb") as f:
-                f.write(file_content)
-            
-            # Compress image if compression is enabled
-            if self.image_compressor:
-                # Compress in-place, converting to JPEG for better compression
-                self.image_compressor.compress_image_file(
-                    tmp_path,
-                    tmp_path,
-                    force_jpeg=True
+        with temporary_file(suffix='.jpg' if use_memory_processing else suffix, logger=self.logger) as tmp_path:
+            if use_memory_processing:
+                # For small files: compress in-memory first, then write once
+                compressed_bytes = self.image_compressor.compress_image_bytes(
+                    file_content,
+                    output_format='JPEG'
                 )
+                with open(tmp_path, "wb") as f:
+                    f.write(compressed_bytes)
+            else:
+                # For large files: use traditional write-then-compress approach
+                with open(tmp_path, "wb") as f:
+                    f.write(file_content)
+                
+                # Compress image if compression is enabled
+                if self.image_compressor:
+                    # Compress in-place, converting to JPEG for better compression
+                    self.image_compressor.compress_image_file(
+                        tmp_path,
+                        tmp_path,
+                        force_jpeg=True
+                    )
             
             # Perform OCR asynchronously
             text = await self._infer_image_async(
@@ -185,14 +201,15 @@ class ImageProcessor:
             processing_time_seconds=processing_time
         )
         
-        # Log response text preview
-        text_preview = text[:500] if len(text) > 500 else text
-        self.logger.info(
-            f"OCR response text (preview): {text_preview}{'...' if len(text) > 500 else ''}",
-            component=COMPONENT_OCR,
-            filename=filename,
-            full_text_length=len(text)
-        )
+        # Log response text preview only in debug mode to reduce overhead
+        if self.config.log_level.lower() == 'debug':
+            text_preview = text[:500] if len(text) > 500 else text
+            self.logger.debug(
+                f"OCR response text (preview): {text_preview}{'...' if len(text) > 500 else ''}",
+                component=COMPONENT_OCR,
+                filename=filename,
+                full_text_length=len(text)
+            )
         
         return text, processing_time
 

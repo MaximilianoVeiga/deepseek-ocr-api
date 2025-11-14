@@ -23,6 +23,11 @@ from constants import (
     DEFAULT_MAX_PDF_PAGES,
     DEFAULT_OCR_PROMPT,
     DEFAULT_CORS_ORIGINS,
+    DEFAULT_ENABLE_TORCH_COMPILE,
+    DEFAULT_ENABLE_CUDA_WARMUP,
+    DEFAULT_USE_MEMORY_PROCESSING,
+    DEFAULT_MEMORY_PROCESSING_MAX_SIZE_MB,
+    DEFAULT_LOG_LEVEL,
     MIN_PORT,
     MAX_PORT,
     MIN_FILE_SIZE_MB,
@@ -104,6 +109,28 @@ class Config(BaseModel):
     png_compression: int = Field(
         default=DEFAULT_PNG_COMPRESSION,
         description="PNG compression level (0-9)"
+    )
+    
+    # Performance optimization configuration
+    enable_torch_compile: bool = Field(
+        default=DEFAULT_ENABLE_TORCH_COMPILE,
+        description="Enable torch.compile() for 20-30% speedup on CUDA devices"
+    )
+    enable_cuda_warmup: bool = Field(
+        default=DEFAULT_ENABLE_CUDA_WARMUP,
+        description="Pre-warm CUDA kernels with dummy inference for faster first request"
+    )
+    use_memory_processing: bool = Field(
+        default=DEFAULT_USE_MEMORY_PROCESSING,
+        description="Use in-memory processing for small files to reduce disk I/O"
+    )
+    memory_processing_max_size_mb: int = Field(
+        default=DEFAULT_MEMORY_PROCESSING_MAX_SIZE_MB,
+        description="Maximum file size (MB) for in-memory processing"
+    )
+    log_level: str = Field(
+        default=DEFAULT_LOG_LEVEL,
+        description="Logging level (debug, info, warning, error)"
     )
     
     # File limits
@@ -200,6 +227,11 @@ class Config(BaseModel):
     def max_file_size_bytes(self) -> int:
         """Get max file size in bytes."""
         return self.max_file_size_mb * 1024 * 1024
+    
+    @property
+    def memory_processing_max_size_bytes(self) -> int:
+        """Get memory processing max size in bytes."""
+        return self.memory_processing_max_size_mb * 1024 * 1024
 
 
 def load_config() -> Config:
@@ -222,6 +254,11 @@ def load_config() -> Config:
         max_image_dimension=int(os.getenv("MAX_IMAGE_DIMENSION", str(DEFAULT_MAX_IMAGE_DIMENSION))),
         jpeg_quality=int(os.getenv("JPEG_QUALITY", str(DEFAULT_JPEG_QUALITY))),
         png_compression=int(os.getenv("PNG_COMPRESSION", str(DEFAULT_PNG_COMPRESSION))),
+        enable_torch_compile=os.getenv("ENABLE_TORCH_COMPILE", str(DEFAULT_ENABLE_TORCH_COMPILE)).lower() in ("true", "1", "yes"),
+        enable_cuda_warmup=os.getenv("ENABLE_CUDA_WARMUP", str(DEFAULT_ENABLE_CUDA_WARMUP)).lower() in ("true", "1", "yes"),
+        use_memory_processing=os.getenv("USE_MEMORY_PROCESSING", str(DEFAULT_USE_MEMORY_PROCESSING)).lower() in ("true", "1", "yes"),
+        memory_processing_max_size_mb=int(os.getenv("MEMORY_PROCESSING_MAX_SIZE_MB", str(DEFAULT_MEMORY_PROCESSING_MAX_SIZE_MB))),
+        log_level=os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL),
         max_file_size_mb=int(os.getenv("MAX_FILE_SIZE_MB", str(DEFAULT_MAX_FILE_SIZE_MB))),
         max_pdf_pages=int(os.getenv("MAX_PDF_PAGES", str(DEFAULT_MAX_PDF_PAGES))),
         cors_origins=os.getenv("CORS_ORIGINS", "*").split(","),

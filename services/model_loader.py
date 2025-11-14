@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 """Model loading and lifecycle management."""
+import os
+import tempfile
 import warnings
 from typing import Optional
 from transformers import AutoModel, AutoTokenizer
 import torch
+from PIL import Image
 
 from config import Config
 from logger import StructuredLogger
@@ -102,6 +105,32 @@ class ModelLoader:
             # Move model to device
             if self.config.device == DEVICE_CUDA:
                 self.model = self.model.cuda().to(torch.bfloat16)
+                
+                # Enable CUDA optimizations for RTX 4080 and similar GPUs
+                torch.backends.cudnn.benchmark = True  # Cache best convolution algorithms
+                torch.backends.cuda.matmul.allow_tf32 = True  # Use TensorFloat-32 for matmul
+                torch.backends.cudnn.allow_tf32 = True  # Use TF32 for cuDNN operations
+                
+                self.logger.info(
+                    "CUDA optimizations enabled (cuDNN benchmark, TF32)",
+                    component=COMPONENT_STARTUP
+                )
+                
+                # Compile model with torch.compile for 20-30% speedup
+                if self.config.enable_torch_compile and hasattr(torch, 'compile'):
+                    self.logger.info(
+                        "Compiling model with torch.compile (this may take a minute)...",
+                        component=COMPONENT_STARTUP
+                    )
+                    self.model = torch.compile(
+                        self.model,
+                        mode='reduce-overhead',  # Optimize for latency
+                        fullgraph=False  # Allow dynamic shapes for flexibility
+                    )
+                    self.logger.info(
+                        "Model compilation complete",
+                        component=COMPONENT_STARTUP
+                    )
             elif self.config.device == DEVICE_CPU:
                 self.model = self.model.cpu()
             else:
@@ -154,4 +183,76 @@ class ModelLoader:
             AutoTokenizer: The loaded tokenizer
         """
         return self.tokenizer
+    
+    def warmup_model(self) -> None:
+        """
+        Warm up the model with a dummy inference to pre-compile CUDA kernels.
+        
+        This improves performance of the first real inference by pre-allocating
+        GPU memory and compiling CUDA kernels ahead of time.
+        """
+        if not self.is_loaded():
+            self.logger.warning(
+                "Cannot warm up model - model not loaded",
+                component=COMPONENT_OCR_SERVICE
+            )
+            return
+        
+        if self.config.device != DEVICE_CUDA or not self.config.enable_cuda_warmup:
+            return
+        
+        self.logger.info(
+            "Warming up model with dummy inference to pre-compile CUDA kernels...",
+            component=COMPONENT_STARTUP
+        )
+        
+        dummy_path = None
+        try:
+            # Create a small dummy image
+            dummy_img = Image.new('RGB', (224, 224), color='white')
+            fd, dummy_path = tempfile.mkstemp(suffix='.jpg')
+            os.close(fd)
+            dummy_img.save(dummy_path, 'JPEG')
+            
+            # Create a temporary output directory
+            temp_output_dir = tempfile.mkdtemp(prefix="dsocr-warmup-")
+            
+            try:
+                # Run dummy inference with torch.inference_mode()
+                with torch.inference_mode():
+                    _ = self.model.infer(
+                        self.tokenizer,
+                        prompt="Warmup",
+                        image_file=dummy_path,
+                        output_path=temp_output_dir,
+                        base_size=self.config.base_size,
+                        image_size=self.config.image_size,
+                        crop_mode=True,
+                        save_results=False,
+                        test_compress=False
+                    )
+                
+                self.logger.info(
+                    "Model warmup complete - CUDA kernels pre-compiled",
+                    component=COMPONENT_STARTUP
+                )
+            finally:
+                # Clean up temp output directory
+                import shutil
+                if os.path.exists(temp_output_dir):
+                    shutil.rmtree(temp_output_dir)
+        
+        except Exception as e:
+            self.logger.warning(
+                f"Model warmup failed (non-critical): {str(e)}",
+                component=COMPONENT_STARTUP,
+                exc_info=e
+            )
+        finally:
+            # Clean up dummy image
+            if dummy_path and os.path.exists(dummy_path):
+                try:
+                    os.unlink(dummy_path)
+                except Exception:
+                    pass
 

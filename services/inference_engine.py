@@ -8,6 +8,7 @@ import shutil
 import warnings
 from pathlib import Path
 from typing import Optional, Any, Tuple
+import torch
 from transformers import AutoModel, AutoTokenizer
 
 from config import Config
@@ -83,18 +84,20 @@ class InferenceEngine:
         warnings.filterwarnings("ignore", category=UserWarning, module="transformers")
         
         try:
-            with contextlib.redirect_stdout(stdout_capture):
-                result = model.infer(
-                    tokenizer,
-                    prompt=prompt,
-                    image_file=image_path,
-                    output_path=output_path,
-                    base_size=self.config.base_size,
-                    image_size=self.config.image_size,
-                    crop_mode=True,
-                    save_results=save_results,
-                    test_compress=False,
-                )
+            # Use inference_mode for better performance than no_grad
+            with torch.inference_mode():
+                with contextlib.redirect_stdout(stdout_capture):
+                    result = model.infer(
+                        tokenizer,
+                        prompt=prompt,
+                        image_file=image_path,
+                        output_path=output_path,
+                        base_size=self.config.base_size,
+                        image_size=self.config.image_size,
+                        crop_mode=True,
+                        save_results=save_results,
+                        test_compress=False,
+                    )
         finally:
             # Reset warning filters
             warnings.resetwarnings()
@@ -191,30 +194,34 @@ class InferenceEngine:
             temp_output_dir = tempfile.mkdtemp(prefix="dsocr-output-")
             
             try:
-                self.logger.info(
-                    f"Calling model.infer with prompt: {prompt[:100]}...",
-                    component=COMPONENT_OCR_SERVICE
-                )
+                # Run model inference (logging only in debug mode to reduce overhead)
+                if self.config.log_level.lower() == 'debug':
+                    self.logger.debug(
+                        f"Calling model.infer with prompt: {prompt[:100]}...",
+                        component=COMPONENT_OCR_SERVICE
+                    )
                 
-                # Run model inference
                 result, stdout_text = self.run_model_inference(
                     model, tokenizer, image_path, prompt, temp_output_dir, save_results=False
                 )
                 
-                # Log what we got back (DEBUG level - model typically returns None and uses stdout)
-                self.logger.debug(
-                    f"Model inference complete: result_type={type(result).__name__}, stdout_length={len(stdout_text)}",
-                    component=COMPONENT_OCR_SERVICE
-                )
+                # Log what we got back (DEBUG level only)
+                if self.config.log_level.lower() == 'debug':
+                    self.logger.debug(
+                        f"Model inference complete: result_type={type(result).__name__}, stdout_length={len(stdout_text)}",
+                        component=COMPONENT_OCR_SERVICE
+                    )
                 
                 # Priority 1: Try to extract text from captured stdout (this is the expected path)
                 if stdout_text:
                     cleaned_text = self.text_cleaner.clean_stdout_output(stdout_text, strip_grounding)
                     if cleaned_text:
-                        self.logger.info(
-                            f"Extracted text from stdout ({len(cleaned_text)} chars)",
-                            component=COMPONENT_OCR_SERVICE
-                        )
+                        # Only log in debug mode to reduce overhead
+                        if self.config.log_level.lower() == 'debug':
+                            self.logger.debug(
+                                f"Extracted text from stdout ({len(cleaned_text)} chars)",
+                                component=COMPONENT_OCR_SERVICE
+                            )
                         return cleaned_text
                 
                 # Priority 2: Check if result has text
@@ -225,34 +232,14 @@ class InferenceEngine:
                         extracted_text = self.text_cleaner.strip_grounding_annotations(extracted_text)
                     return extracted_text
                 
-                # Priority 3: Try saving results to file as fallback
-                self.logger.info(
-                    "No text from stdout or result, trying with save_results=True",
-                    component=COMPONENT_OCR_SERVICE
-                )
-                
-                _, stdout_text2 = self.run_model_inference(
-                    model, tokenizer, image_path, prompt, temp_output_dir, save_results=True
-                )
-                
-                # Try stdout from second call
-                if stdout_text2:
-                    cleaned_text2 = self.text_cleaner.clean_stdout_output(stdout_text2, strip_grounding)
-                    if cleaned_text2:
-                        self.logger.info(
-                            f"Extracted text from fallback stdout ({len(cleaned_text2)} chars)",
-                            component=COMPONENT_OCR_SERVICE
-                        )
-                        return cleaned_text2
-                
-                # Look for output files
+                # Priority 3: Look for output files (but don't re-run inference)
                 file_text = self.try_read_output_files(temp_output_dir, strip_grounding)
                 if file_text:
                     return file_text
                 
-                # Nothing worked
+                # Nothing worked - log warning and return empty string
                 self.logger.warning(
-                    "Unable to extract text from model inference",
+                    "Unable to extract text from model inference (no stdout, result, or output files)",
                     component=COMPONENT_OCR_SERVICE
                 )
                 return ""
