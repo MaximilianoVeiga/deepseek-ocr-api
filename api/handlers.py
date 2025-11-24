@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Exception handlers for FastAPI application."""
 from typing import TYPE_CHECKING
-from fastapi import Request
+from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 
@@ -147,6 +147,39 @@ def register_exception_handlers(app: "FastAPI", logger: StructuredLogger) -> Non
             content=ErrorResponse(
                 detail=str(exc),
                 error_type="ValidationError",
+                correlation_id=correlation_id
+            ).model_dump()
+        )
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(
+        request: Request,
+        exc: HTTPException
+    ) -> JSONResponse:
+        """Handle HTTP exceptions."""
+        correlation_id = getattr(request.state, "correlation_id", None)
+        
+        # Log based on status code severity
+        if exc.status_code >= 500:
+            logger.error(
+                f"HTTP error {exc.status_code}: {exc.detail}",
+                component=COMPONENT_API,
+                path=request.url.path,
+                correlation_id=correlation_id
+            )
+        else:
+            logger.info(
+                f"HTTP error {exc.status_code}: {exc.detail}",
+                component=COMPONENT_API,
+                path=request.url.path,
+                correlation_id=correlation_id
+            )
+            
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=ErrorResponse(
+                detail=str(exc.detail),
+                error_type="HTTPException",
                 correlation_id=correlation_id
             ).model_dump()
         )

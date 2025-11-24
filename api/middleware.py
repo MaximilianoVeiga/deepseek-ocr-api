@@ -73,21 +73,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         
         # Process request and measure duration
         start_time = time.time()
-        try:
-            response = await call_next(request)
-        except Exception as e:
-            # Log error and re-raise
-            duration_ms = int((time.time() - start_time) * 1000)
-            self.logger.error(
-                f"Request failed: {request.method} {request.url.path}",
-                component=COMPONENT_MIDDLEWARE,
-                correlation_id=correlation_id,
-                method=request.method,
-                path=request.url.path,
-                duration_ms=duration_ms,
-                exc_info=e,
-            )
-            raise
+        response = await call_next(request)
         
         duration_ms = int((time.time() - start_time) * 1000)
         

@@ -3,7 +3,15 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Request
 from typing import Optional
 
-from models import ImageOCRResponse, PDFOCRResponse, PageResult, ErrorResponse, FileValidationError, OutputFormat
+from models import (
+    ImageOCRResponse,
+    PDFOCRResponse,
+    PageResult,
+    ErrorResponse,
+    FileValidationError,
+    FileSizeLimitError,
+    OutputFormat
+)
 from services import OCRService
 from config import Config, get_config
 from api.dependencies import get_ocr_service_dependency, get_config_dependency
@@ -105,11 +113,16 @@ async def ocr_image(
     
     # Validate file size before reading content to avoid loading large files into memory
     if file.size and file.size > config.max_file_size_bytes:
-        from models import FileSizeLimitError
         raise FileSizeLimitError(file.size, config.max_file_size_bytes)
     
-    # Read file content
-    file_content = await file.read()
+    # Read file content safely
+    if file.size is None:
+        # If size is unknown, read with limit + 1 byte to check if it exceeds
+        file_content = await file.read(config.max_file_size_bytes + 1)
+        if len(file_content) > config.max_file_size_bytes:
+             raise FileSizeLimitError(len(file_content), config.max_file_size_bytes)
+    else:
+        file_content = await file.read()
     
     if not file_content:
         raise FileValidationError(ERROR_FILE_EMPTY)
@@ -183,10 +196,6 @@ async def ocr_image(
             "description": "Invalid request - missing file or unsupported format",
             "model": ErrorResponse
         },
-        401: {
-            "description": "Unauthorized - invalid or missing API key",
-            "model": ErrorResponse
-        },
         413: {
             "description": "File size exceeds limit or PDF has too many pages",
             "model": ErrorResponse
@@ -235,11 +244,16 @@ async def ocr_pdf(
     
     # Validate file size before reading content to avoid loading large files into memory
     if file.size and file.size > config.max_file_size_bytes:
-        from models import FileSizeLimitError
         raise FileSizeLimitError(file.size, config.max_file_size_bytes)
     
-    # Read file content
-    file_content = await file.read()
+    # Read file content safely
+    if file.size is None:
+        # If size is unknown, read with limit + 1 byte to check if it exceeds
+        file_content = await file.read(config.max_file_size_bytes + 1)
+        if len(file_content) > config.max_file_size_bytes:
+             raise FileSizeLimitError(len(file_content), config.max_file_size_bytes)
+    else:
+        file_content = await file.read()
     
     if not file_content:
         raise FileValidationError(ERROR_FILE_EMPTY)
