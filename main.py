@@ -57,9 +57,6 @@ def main() -> None:
         ocr_service = get_ocr_service(config=config)
         ocr_service.load_model()
         
-        # Warm up model for optimal first-request performance
-        ocr_service.model_loader.warmup_model()
-        
         # Create FastAPI app
         app = create_app(config=config, ocr_service=ocr_service)
         

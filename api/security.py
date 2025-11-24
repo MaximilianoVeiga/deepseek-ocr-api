@@ -12,15 +12,18 @@ from constants import HTTP_BAD_REQUEST, HTTP_INTERNAL_SERVER_ERROR
 # API Key Authentication
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
+# Rate Limiter Singleton
+limiter = Limiter(key_func=get_remote_address)
+
 
 def get_rate_limiter() -> Limiter:
     """
-    Create and return a rate limiter instance.
+    Get the global rate limiter instance.
     
     Returns:
         Limiter: Configured rate limiter
     """
-    return Limiter(key_func=get_remote_address)
+    return limiter
 
 
 async def verify_api_key(
@@ -112,4 +115,3 @@ def validate_prompt(prompt: str, max_length: int = 2000) -> None:
                 status_code=HTTP_BAD_REQUEST,
                 detail=f"Prompt contains suspicious pattern: '{pattern}'"
             )
-

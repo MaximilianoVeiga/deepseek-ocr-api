@@ -88,11 +88,11 @@ cp env.example .env
 docker compose up --build
 ```
 
-The API will be available at `http://localhost:3000`
+The API will be available at `http://localhost:8000`
 
 **Test it:**
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:8000/health
 ```
 
 ## Installation
@@ -121,7 +121,7 @@ Docker provides the easiest and most reliable way to run the API with all depend
 2. **Edit `.env` file** (optional):
    ```bash
    # Adjust settings as needed
-   PORT=3000
+   PORT=8000
    MAX_FILE_SIZE_MB=50
    ```
 
@@ -132,7 +132,7 @@ Docker provides the easiest and most reliable way to run the API with all depend
 
 4. **Verify installation:**
    ```bash
-   curl http://localhost:3000/health/detailed
+   curl http://localhost:8000/health/detailed
    ```
 
 ### Local Development
@@ -193,7 +193,7 @@ Configuration is managed through environment variables. Copy `env.example` to `.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `HOST` | `0.0.0.0` | Server bind address |
-| `PORT` | `3000` | Server port |
+| `PORT` | `8000` | Server port |
 | `ENVIRONMENT` | `development` | Environment mode (`development`/`production`) |
 
 ### Model Configuration
@@ -242,7 +242,7 @@ Configuration is managed through environment variables. Copy `env.example` to `.
 Process images and extract text as Markdown:
 
 ```bash
-curl -X POST http://localhost:3000/ocr/image \
+curl -X POST http://localhost:8000/ocr/image \
   -F "file=@invoice.jpg" \
   -F "prompt=<image>\n<|grounding|>Convert the document to markdown."
 ```
@@ -271,7 +271,7 @@ curl -X POST http://localhost:3000/ocr/image \
 Process multi-page PDFs:
 
 ```bash
-curl -X POST http://localhost:3000/ocr/pdf \
+curl -X POST http://localhost:8000/ocr/pdf \
   -F "file=@contract.pdf" \
   -F "dpi=220"
 ```
@@ -313,7 +313,7 @@ import requests
 # Image OCR
 with open("document.jpg", "rb") as f:
     response = requests.post(
-        "http://localhost:3000/ocr/image",
+        "http://localhost:8000/ocr/image",
         files={"file": f},
         data={"prompt": "<image>\n<|grounding|>Convert the document to markdown."}
     )
@@ -324,7 +324,7 @@ print(result["text"])
 # PDF OCR
 with open("report.pdf", "rb") as f:
     response = requests.post(
-        "http://localhost:3000/ocr/pdf",
+        "http://localhost:8000/ocr/pdf",
         files={"file": f},
         data={"dpi": 220}
     )
@@ -346,7 +346,7 @@ async def process_document():
     async with httpx.AsyncClient() as client:
         with open("document.jpg", "rb") as f:
             response = await client.post(
-                "http://localhost:3000/ocr/image",
+                "http://localhost:8000/ocr/image",
                 files={"file": ("document.jpg", f, "image/jpeg")},
                 data={"prompt": "<image>\n<|grounding|>Convert the document to markdown."}
             )
@@ -402,7 +402,7 @@ The API provides interactive documentation powered by FastAPI:
 #### Health Check
 - **`GET /health`** - Basic health check
   ```bash
-  curl http://localhost:3000/health
+  curl http://localhost:8000/health
   ```
 
 #### OCR Processing
@@ -417,9 +417,9 @@ The API provides interactive documentation powered by FastAPI:
 
 With the server running, access:
 
-- **Swagger UI (Interactive):** http://localhost:3000/docs
-- **ReDoc (Alternative view):** http://localhost:3000/redoc
-- **OpenAPI JSON Schema:** http://localhost:3000/openapi.json
+- **Swagger UI (Interactive):** http://localhost:8000/docs
+- **ReDoc (Alternative view):** http://localhost:8000/redoc
+- **OpenAPI JSON Schema:** http://localhost:8000/openapi.json
 
 The Swagger UI allows you to:
 - Test endpoints directly from your browser
@@ -615,10 +615,10 @@ pytest -m integration
 2. Or kill the process using the port:
    ```bash
    # Linux/Mac
-   lsof -ti:3000 | xargs kill -9
+   lsof -ti:8000 | xargs kill -9
    
    # Windows
-   netstat -ano | findstr :3000
+   netstat -ano | findstr :8000
    taskkill /PID <PID> /F
    ```
 

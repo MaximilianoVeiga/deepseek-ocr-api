@@ -1,14 +1,29 @@
 # -*- coding: utf-8 -*-
 """OCR processing router."""
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Request
+from typing import Optional
 
 from models import ImageOCRResponse, PDFOCRResponse, PageResult, ErrorResponse, FileValidationError, OutputFormat
 from services import OCRService
-from config import Config
+from config import Config, get_config
 from api.dependencies import get_ocr_service_dependency, get_config_dependency
+from api.security import verify_api_key, limiter, validate_prompt
 from constants import ERROR_FILE_REQUIRED, ERROR_FILE_EMPTY, HTTP_BAD_REQUEST, OUTPUT_FORMAT_PROMPTS
 
 router = APIRouter(prefix="/ocr", tags=["ocr"])
+
+
+def get_rate_limit() -> str:
+    """
+    Get rate limit from config dynamically.
+    
+    Returns:
+        str: Rate limit string (e.g. "60/minute")
+    """
+    # Default to 60/minute if config is not available
+    config = get_config()
+    limit = config.rate_limit_per_minute
+    return f"{limit}/minute"
 
 
 @router.post(
@@ -16,6 +31,7 @@ router = APIRouter(prefix="/ocr", tags=["ocr"])
     response_model=ImageOCRResponse,
     summary="Extract text from images",
     description="Extract text from image files with selectable output formats (markdown, text, table, figure, json, structured_data). Supported formats: PNG, JPG, JPEG, WEBP, BMP, TIFF, TIF. Tip: Use high-resolution images (300+ DPI) for best results.",
+    dependencies=[Depends(verify_api_key)],
     responses={
         200: {
             "description": "Successfully extracted text from image",
@@ -37,8 +53,16 @@ router = APIRouter(prefix="/ocr", tags=["ocr"])
             "description": "Invalid request - missing file or unsupported format",
             "model": ErrorResponse
         },
+        401: {
+            "description": "Unauthorized - invalid or missing API key",
+            "model": ErrorResponse
+        },
         413: {
             "description": "File size exceeds maximum limit",
+            "model": ErrorResponse
+        },
+        429: {
+            "description": "Rate limit exceeded",
             "model": ErrorResponse
         },
         500: {
@@ -48,6 +72,7 @@ router = APIRouter(prefix="/ocr", tags=["ocr"])
     },
     response_description="Extracted text with metadata"
 )
+@limiter.limit(get_rate_limit)
 async def ocr_image(
     request: Request,
     file: UploadFile = File(..., description="Image file to process"),
@@ -92,6 +117,9 @@ async def ocr_image(
     # Get prompt based on selected output format
     ocr_prompt = OUTPUT_FORMAT_PROMPTS.get(output_format.value, OUTPUT_FORMAT_PROMPTS["markdown"])
     
+    # Validate prompt
+    validate_prompt(ocr_prompt, config.prompt_max_length)
+    
     # Process image (strip_grounding is the inverse of include_grounding)
     text, processing_time = await service.process_image(
         file_content=file_content,
@@ -118,6 +146,7 @@ async def ocr_image(
     response_model=PDFOCRResponse,
     summary="Extract text from PDF documents",
     description="Extract text from multi-page PDFs page by page with selectable output formats (markdown, text, table, figure, json, structured_data). Limits: Max 100 pages, max 50 MB. Note: Processing time scales with page count. Failed pages are included with error information.",
+    dependencies=[Depends(verify_api_key)],
     responses={
         200: {
             "description": "Successfully extracted text from PDF pages",
@@ -154,8 +183,16 @@ async def ocr_image(
             "description": "Invalid request - missing file or unsupported format",
             "model": ErrorResponse
         },
+        401: {
+            "description": "Unauthorized - invalid or missing API key",
+            "model": ErrorResponse
+        },
         413: {
             "description": "File size exceeds limit or PDF has too many pages",
+            "model": ErrorResponse
+        },
+        429: {
+            "description": "Rate limit exceeded",
             "model": ErrorResponse
         },
         500: {
@@ -165,6 +202,7 @@ async def ocr_image(
     },
     response_description="Extracted text from all pages with metadata"
 )
+@limiter.limit(get_rate_limit)
 async def ocr_pdf(
     request: Request,
     file: UploadFile = File(..., description="PDF file to process"),
@@ -209,6 +247,9 @@ async def ocr_pdf(
     # Get prompt based on selected output format
     ocr_prompt = OUTPUT_FORMAT_PROMPTS.get(output_format.value, OUTPUT_FORMAT_PROMPTS["markdown"])
     
+    # Validate prompt
+    validate_prompt(ocr_prompt, config.prompt_max_length)
+    
     # Process PDF (strip_grounding is the inverse of include_grounding)
     page_results, warnings = await service.process_pdf(
         file_content=file_content,
@@ -236,4 +277,3 @@ async def ocr_pdf(
         correlation_id=correlation_id,
         warnings=warnings
     )
-

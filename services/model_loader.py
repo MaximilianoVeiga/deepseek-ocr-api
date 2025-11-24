@@ -198,9 +198,6 @@ class ModelLoader:
             )
             return
         
-        if self.config.device != DEVICE_CUDA or not self.config.enable_cuda_warmup:
-            return
-        
         self.logger.info(
             "Warming up model with dummy inference to pre-compile CUDA kernels...",
             component=COMPONENT_STARTUP

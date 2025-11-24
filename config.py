@@ -24,7 +24,6 @@ from constants import (
     DEFAULT_OCR_PROMPT,
     DEFAULT_CORS_ORIGINS,
     DEFAULT_ENABLE_TORCH_COMPILE,
-    DEFAULT_ENABLE_CUDA_WARMUP,
     DEFAULT_USE_MEMORY_PROCESSING,
     DEFAULT_MEMORY_PROCESSING_MAX_SIZE_MB,
     DEFAULT_LOG_LEVEL,
@@ -115,10 +114,6 @@ class Config(BaseModel):
     enable_torch_compile: bool = Field(
         default=DEFAULT_ENABLE_TORCH_COMPILE,
         description="Enable torch.compile() for 20-30% speedup on CUDA devices"
-    )
-    enable_cuda_warmup: bool = Field(
-        default=DEFAULT_ENABLE_CUDA_WARMUP,
-        description="Pre-warm CUDA kernels with dummy inference for faster first request"
     )
     use_memory_processing: bool = Field(
         default=DEFAULT_USE_MEMORY_PROCESSING,
@@ -255,7 +250,6 @@ def load_config() -> Config:
         jpeg_quality=int(os.getenv("JPEG_QUALITY", str(DEFAULT_JPEG_QUALITY))),
         png_compression=int(os.getenv("PNG_COMPRESSION", str(DEFAULT_PNG_COMPRESSION))),
         enable_torch_compile=os.getenv("ENABLE_TORCH_COMPILE", str(DEFAULT_ENABLE_TORCH_COMPILE)).lower() in ("true", "1", "yes"),
-        enable_cuda_warmup=os.getenv("ENABLE_CUDA_WARMUP", str(DEFAULT_ENABLE_CUDA_WARMUP)).lower() in ("true", "1", "yes"),
         use_memory_processing=os.getenv("USE_MEMORY_PROCESSING", str(DEFAULT_USE_MEMORY_PROCESSING)).lower() in ("true", "1", "yes"),
         memory_processing_max_size_mb=int(os.getenv("MEMORY_PROCESSING_MAX_SIZE_MB", str(DEFAULT_MEMORY_PROCESSING_MAX_SIZE_MB))),
         log_level=os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL),

@@ -12,9 +12,9 @@ services:
             - capabilities: [gpu]
     environment:
       - DS_OCR_MODEL=unsloth/DeepSeek-OCR
-      - PORT=3000
+      - PORT=8000
     ports:
-      - '3000:3000'
+      - '8000:8000'
     volumes:
       - ./examples:/app/examples
     command: ["python3", "-u", "-m", "main"]

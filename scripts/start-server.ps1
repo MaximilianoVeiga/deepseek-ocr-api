@@ -1,6 +1,6 @@
 # Start the FastAPI inference server
-# Set the port (default: 3000)
-$env:PORT = if ($env:PORT) { $env:PORT } else { "3000" }
+# Set the port (default: 8000)
+$env:PORT = if ($env:PORT) { $env:PORT } else { "8000" }
 
 # Navigate to project root directory (parent of scripts folder)
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path

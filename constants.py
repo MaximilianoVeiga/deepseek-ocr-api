@@ -9,7 +9,7 @@ DEFAULT_VERSION: Final[str] = "1.0.0"
 
 # Server defaults
 DEFAULT_HOST: Final[str] = "0.0.0.0"
-DEFAULT_PORT: Final[int] = 3000
+DEFAULT_PORT: Final[int] = 8000
 
 # Model defaults
 DEFAULT_MODEL_NAME: Final[str] = "unsloth/DeepSeek-OCR"
@@ -25,7 +25,6 @@ DEFAULT_PNG_COMPRESSION: Final[int] = 6
 
 # Performance optimization defaults
 DEFAULT_ENABLE_TORCH_COMPILE: Final[bool] = True
-DEFAULT_ENABLE_CUDA_WARMUP: Final[bool] = True
 DEFAULT_USE_MEMORY_PROCESSING: Final[bool] = True
 DEFAULT_MEMORY_PROCESSING_MAX_SIZE_MB: Final[int] = 10
 DEFAULT_LOG_LEVEL: Final[str] = "info"

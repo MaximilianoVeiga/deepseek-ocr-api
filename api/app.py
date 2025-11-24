@@ -1,12 +1,17 @@
 # -*- coding: utf-8 -*-
 """FastAPI application factory."""
-from typing import Optional
+from typing import Optional, AsyncGenerator
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from config import Config, get_config
 from logger import get_logger
 from services import OCRService, get_ocr_service
+from api.security import limiter
 from .handlers import register_exception_handlers
 from .routers import health_router, ocr_router
 from .middleware import RequestLoggingMiddleware
@@ -40,6 +45,25 @@ TAGS_METADATA = [
 ]
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """
+    FastAPI lifespan context manager.
+    
+    Handles startup and shutdown events for services.
+    """
+    # Retrieve service from app state (injected in create_app)
+    service: OCRService = app.state.ocr_service
+    
+    # Start background worker
+    await service.start()
+    
+    yield
+    
+    # Stop background worker
+    await service.stop()
+
+
 def create_app(
     config: Optional[Config] = None,
     ocr_service: Optional[OCRService] = None
@@ -58,7 +82,10 @@ def create_app(
     app_config = config or get_config()
     logger = get_logger(version=app_config.version)
     
-    # Create app with enhanced documentation
+    # Get OCR service
+    service = ocr_service or get_ocr_service(config=app_config)
+    
+    # Create app with enhanced documentation and lifespan
     app = FastAPI(
         title=app_config.title,
         version=app_config.version,
@@ -75,7 +102,19 @@ def create_app(
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
+        lifespan=lifespan,
     )
+    
+    # Store config and service in app state
+    app.state.config = app_config
+    app.state.ocr_service = service
+    app.state.logger = logger
+    
+    # Store limiter in app state
+    app.state.limiter = limiter
+    
+    # Add exception handler for rate limiting
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     
     # Add CORS middleware
     app.add_middleware(
@@ -86,16 +125,11 @@ def create_app(
         allow_headers=["*"],
     )
     
+    # Add SlowAPI middleware for rate limiting
+    app.add_middleware(SlowAPIMiddleware)
+    
     # Add request logging middleware
     app.add_middleware(RequestLoggingMiddleware, logger=logger)
-    
-    # Get OCR service
-    service = ocr_service or get_ocr_service(config=app_config)
-    
-    # Store config and service in app state
-    app.state.config = app_config
-    app.state.ocr_service = service
-    app.state.logger = logger
     
     # Register exception handlers
     register_exception_handlers(app, logger)
@@ -105,4 +139,3 @@ def create_app(
     app.include_router(ocr_router)
     
     return app
-
