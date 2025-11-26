@@ -25,6 +25,7 @@ DEFAULT_PNG_COMPRESSION: Final[int] = 6
 
 # Performance optimization defaults
 DEFAULT_ENABLE_TORCH_COMPILE: Final[bool] = True
+DEFAULT_ENABLE_FLASH_ATTENTION: Final[bool] = True
 DEFAULT_USE_MEMORY_PROCESSING: Final[bool] = True
 DEFAULT_MEMORY_PROCESSING_MAX_SIZE_MB: Final[int] = 10
 DEFAULT_LOG_LEVEL: Final[str] = "info"

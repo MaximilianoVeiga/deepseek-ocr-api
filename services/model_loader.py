@@ -3,6 +3,7 @@
 import os
 import tempfile
 import warnings
+from importlib.util import find_spec
 from typing import Optional
 from transformers import AutoModel, AutoTokenizer
 import torch
@@ -22,6 +23,16 @@ from constants import (
     DEVICE_CUDA,
     DEVICE_CPU,
 )
+
+
+def is_flash_attention_available() -> bool:
+    """
+    Check if Flash-Attention 2 package is installed and available.
+    
+    Returns:
+        bool: True if flash-attn package is available, False otherwise
+    """
+    return find_spec("flash_attn") is not None
 
 
 class ModelLoader:
@@ -92,11 +103,42 @@ class ModelLoader:
                         component=COMPONENT_STARTUP
                     )
                 
+                # Determine if Flash-Attention 2 should be used
+                use_flash_attention = False
+                if self.config.enable_flash_attention and self.config.device == DEVICE_CUDA:
+                    if is_flash_attention_available():
+                        use_flash_attention = True
+                        self.logger.info(
+                            "Flash-Attention 2 is enabled and available - using FA2 for 2-4x speedup",
+                            component=COMPONENT_STARTUP
+                        )
+                    else:
+                        self.logger.warning(
+                            "Flash-Attention 2 is enabled but flash-attn package is not installed. "
+                            "Install with: pip install flash-attn --no-build-isolation. "
+                            "Falling back to standard attention.",
+                            component=COMPONENT_STARTUP
+                        )
+                elif self.config.enable_flash_attention and self.config.device != DEVICE_CUDA:
+                    self.logger.info(
+                        "Flash-Attention 2 requires CUDA device - skipping FA2 on non-CUDA device",
+                        component=COMPONENT_STARTUP
+                    )
+                
+                # Build model loading kwargs
+                model_kwargs = {
+                    "trust_remote_code": True,
+                    "use_safetensors": True,
+                }
+                
+                # Add Flash-Attention 2 if available and enabled
+                if use_flash_attention:
+                    model_kwargs["attn_implementation"] = "flash_attention_2"
+                
                 # Load model and move to appropriate device
                 self.model = AutoModel.from_pretrained(
                     self.config.model_name,
-                    trust_remote_code=True,
-                    use_safetensors=True
+                    **model_kwargs
                 ).eval()
             finally:
                 # Reset warning filters
