@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🔍 DeepSeek-OCR API
+# DeepSeek-OCR API
 
 **A high-performance FastAPI service for OCR processing using the DeepSeek-OCR model with GPU acceleration**
 
@@ -19,57 +19,54 @@
 
 </div>
 
-## 📋 Table of Contents
+## Table of Contents
 
-- [Overview](#-overview)
-- [Features](#-features)
-- [Requirements](#-requirements)
-- [Quick Start](#-quick-start)
-- [Installation](#-installation)
-- [Configuration](#-configuration)
-- [Usage](#-usage)
-- [API Documentation](#-api-documentation)
-- [Project Structure](#-project-structure)
-- [Development](#-development)
-- [Testing](#-testing)
-- [Troubleshooting](#-troubleshooting)
-- [Performance Tips](#-performance-tips)
-- [Contributing](#-contributing)
-- [License](#-license)
+- [Overview](#overview)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Quick Start](#quick-start)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [API Documentation](#api-documentation)
+- [Project Structure](#project-structure)
+- [Development](#development)
+- [Testing](#testing)
+- [Troubleshooting](#troubleshooting)
+- [Performance Tips](#performance-tips)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
-## 🎯 Overview
+## Overview
 
 DeepSeek-OCR API is a **production-ready REST API** built with FastAPI that leverages the powerful DeepSeek-OCR model for document processing. It supports image and PDF processing with GPU acceleration, converting documents to structured markdown format.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           DeepSeek-OCR API Flow                             │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│   ┌──────────┐      ┌──────────────┐      ┌─────────────┐      ┌─────────┐ │
-│   │  Client  │ ───▶ │   FastAPI    │ ───▶ │  OCR Model  │ ───▶ │ Output  │ │
-│   │ (Images/ │      │   Server     │      │  (GPU/CUDA) │      │  (MD)   │ │
-│   │   PDFs)  │      │              │      │             │      │         │ │
-│   └──────────┘      └──────────────┘      └─────────────┘      └─────────┘ │
-│        │                   │                     │                   │      │
-│        │              Health Checks         Flash-Attn          Markdown    │
-│        │              Rate Limiting         Transformers        Tables      │
-│        │              CORS / Auth           HuggingFace         Headers     │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+sequenceDiagram
+    participant Client as Client<br/>(Images/PDFs)
+    participant API as FastAPI Server<br/>(Health Checks, Rate Limiting, CORS/Auth)
+    participant Model as OCR Model<br/>(GPU/CUDA, Flash-Attn, Transformers)
+    participant Output as Output<br/>(Markdown)
+
+    Client->>API: POST /ocr/image or /ocr/pdf
+    Note over API: Validate request<br/>Check rate limits<br/>Authenticate
+    API->>Model: Process document
+    Note over Model: GPU acceleration<br/>Flash-Attention 2<br/>HuggingFace inference
+    Model-->>API: Extracted text
+    API-->>Client: JSON response<br/>(Headers, Tables, Lists)
 ```
 
 ---
 
-## ✨ Features
+## Features
 
 <table>
 <tr>
 <td width="50%">
 
-### 🚀 Performance
+### Performance
 - **GPU Acceleration** - Full CUDA support with Flash-Attention 2
 - **Async Processing** - Non-blocking I/O for high throughput
 - **Optimized Inference** - Efficient memory management
@@ -77,7 +74,7 @@ DeepSeek-OCR API is a **production-ready REST API** built with FastAPI that leve
 </td>
 <td width="50%">
 
-### 📄 Document Support
+### Document Support
 - **Images** - PNG, JPG, WEBP, BMP, TIFF
 - **PDFs** - Multi-page with configurable DPI
 - **Structured Output** - Clean Markdown format
@@ -87,7 +84,7 @@ DeepSeek-OCR API is a **production-ready REST API** built with FastAPI that leve
 <tr>
 <td width="50%">
 
-### 🛡️ Production Ready
+### Production Ready
 - **Health Monitoring** - Kubernetes-ready probes
 - **API Authentication** - Optional API key support
 - **Rate Limiting** - Configurable per-IP limits
@@ -95,7 +92,7 @@ DeepSeek-OCR API is a **production-ready REST API** built with FastAPI that leve
 </td>
 <td width="50%">
 
-### 🔧 Developer Experience
+### Developer Experience
 - **Interactive Docs** - Swagger UI & ReDoc
 - **Type Safety** - Full Pydantic validation
 - **Comprehensive Logging** - Structured JSON logs
@@ -106,7 +103,7 @@ DeepSeek-OCR API is a **production-ready REST API** built with FastAPI that leve
 
 ---
 
-## 📦 Requirements
+## Requirements
 
 ### Hardware Requirements
 
@@ -130,7 +127,7 @@ DeepSeek-OCR API is a **production-ready REST API** built with FastAPI that leve
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 Get up and running in **under 2 minutes**:
 
@@ -146,7 +143,7 @@ cp env.example .env
 docker compose up --build
 ```
 
-**🎉 That's it!** The API is now available at `http://localhost:8000`
+**That's it!** The API is now available at `http://localhost:8000`
 
 ### Verify Installation
 
@@ -168,18 +165,18 @@ curl -X POST http://localhost:8000/ocr/image \
 
 ---
 
-## 📥 Installation
+## Installation
 
-### 🐳 Docker (Recommended)
+### Docker (Recommended)
 
 Docker provides the easiest and most reliable deployment with all dependencies configured.
 
 <details>
 <summary><b>Prerequisites Checklist</b></summary>
 
-1. ✅ [Docker Desktop](https://www.docker.com/products/docker-desktop) or Docker Engine installed
-2. ✅ [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) installed
-3. ✅ GPU access verified:
+1. [Docker Desktop](https://www.docker.com/products/docker-desktop) or Docker Engine installed
+2. [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) installed
+3. GPU access verified:
    ```bash
    docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
    ```
@@ -204,7 +201,7 @@ docker compose up --build
 docker compose up -d --build
 ```
 
-### 💻 Local Development
+### Local Development
 
 For development or when Docker is not available.
 
@@ -256,7 +253,7 @@ python main.py
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 All configuration is managed through environment variables. Copy `env.example` to `.env` and customize.
 
@@ -306,7 +303,7 @@ All configuration is managed through environment variables. Copy `env.example` t
 
 ---
 
-## 📖 Usage
+## Usage
 
 ### Image OCR
 
@@ -448,7 +445,7 @@ print(text)
 
 ---
 
-## 📚 API Documentation
+## API Documentation
 
 ### Endpoints Overview
 
@@ -473,32 +470,32 @@ With the server running, access:
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 deepseek-ocr-api/
-├── 📂 api/                       # FastAPI application
+├── api/                          # FastAPI application
 │   ├── app.py                    # FastAPI app factory
 │   ├── dependencies.py           # Dependency injection
 │   ├── handlers.py               # Exception handlers
 │   ├── middleware.py             # CORS and middleware
 │   ├── routes.py                 # Route configuration
-│   └── 📂 routers/               # API route modules
+│   └── routers/                  # API route modules
 │       ├── health.py             # Health check endpoints
 │       └── ocr.py                # OCR processing endpoints
-├── 📂 models/                    # Data models
+├── models/                       # Data models
 │   ├── schemas.py                # Pydantic request/response models
 │   ├── validators.py             # Custom validators
 │   └── exceptions.py             # Custom exceptions
-├── 📂 services/                  # Business logic
+├── services/                     # Business logic
 │   └── ocr_service.py            # OCR processing service
-├── 📂 utils/                     # Utility functions
+├── utils/                        # Utility functions
 │   └── files.py                  # File handling utilities
-├── 📂 scripts/                   # Helper scripts
+├── scripts/                      # Helper scripts
 │   ├── install-deps.ps1          # Windows dependency installer
 │   ├── start-server.ps1          # Windows server starter
 │   └── run-tests.ps1             # Windows test runner
-├── 📂 tests/                     # Test suite
+├── tests/                        # Test suite
 │   ├── conftest.py               # Pytest configuration
 │   ├── test_api.py               # API endpoint tests
 │   └── test_ocr_service.py       # Service layer tests
@@ -516,7 +513,7 @@ deepseek-ocr-api/
 
 ---
 
-## 🛠️ Development
+## Development
 
 ### Setting Up Development Environment
 
@@ -536,15 +533,15 @@ python main.py
 
 ### Code Style Guidelines
 
-- ✅ PEP 8 style compliance
-- ✅ Type hints throughout
-- ✅ Docstrings for all public functions
-- ✅ Async/await patterns for I/O operations
-- ✅ Atomic commits with clear messages
+- PEP 8 style compliance
+- Type hints throughout
+- Docstrings for all public functions
+- Async/await patterns for I/O operations
+- Atomic commits with clear messages
 
 ---
 
-## 🧪 Testing
+## Testing
 
 ### Run All Tests
 
@@ -587,10 +584,10 @@ pytest -m integration
 
 ---
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 <details>
-<summary><b>🔴 GPU Not Detected</b></summary>
+<summary><b>GPU Not Detected</b></summary>
 
 **Symptoms:** Model runs on CPU, very slow processing
 
@@ -612,7 +609,7 @@ pytest -m integration
 </details>
 
 <details>
-<summary><b>🔴 Out of Memory (OOM)</b></summary>
+<summary><b>Out of Memory (OOM)</b></summary>
 
 **Symptoms:** CUDA out of memory errors
 
@@ -626,7 +623,7 @@ pytest -m integration
 </details>
 
 <details>
-<summary><b>🔴 Model Download Issues</b></summary>
+<summary><b>Model Download Issues</b></summary>
 
 **Symptoms:** Model fails to download from HuggingFace
 
@@ -646,7 +643,7 @@ pytest -m integration
 </details>
 
 <details>
-<summary><b>🔴 Port Already in Use</b></summary>
+<summary><b>Port Already in Use</b></summary>
 
 **Symptoms:** `Address already in use` error
 
@@ -670,7 +667,7 @@ pytest -m integration
 </details>
 
 <details>
-<summary><b>🔴 Slow Processing</b></summary>
+<summary><b>Slow Processing</b></summary>
 
 **Symptoms:** OCR takes very long time
 
@@ -697,7 +694,7 @@ python main.py
 
 ---
 
-## ⚡ Performance Tips
+## Performance Tips
 
 ### Optimization Checklist
 
@@ -717,7 +714,7 @@ python main.py
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Here's how to get started:
 
@@ -740,13 +737,13 @@ Contributions are welcome! Here's how to get started:
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [DeepSeek AI](https://github.com/deepseek-ai) - OCR model
 - [FastAPI](https://fastapi.tiangolo.com/) - Web framework
@@ -757,15 +754,12 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 <div align="center">
 
-## 📬 Contact & Support
-
-[![GitHub Issues](https://img.shields.io/badge/Issues-GitHub-red?style=flat-square&logo=github)](https://github.com/yourusername/deepseek-ocr-api/issues)
-[![GitHub Discussions](https://img.shields.io/badge/Discussions-GitHub-blue?style=flat-square&logo=github)](https://github.com/yourusername/deepseek-ocr-api/discussions)
+## Contact & Support
 
 **Author:** Maximiliano Veiga
 
 ---
 
-**⭐ If you find this project useful, please consider giving it a star!**
+**If you find this project useful, please consider giving it a star!**
 
 </div>
