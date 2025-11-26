@@ -137,6 +137,7 @@ DEVICE_CPU: Final[str] = "cpu"
 
 # HTTP status codes
 HTTP_OK: Final[int] = 200
+HTTP_UNAUTHORIZED: Final[int] = 401
 HTTP_BAD_REQUEST: Final[int] = 400
 HTTP_REQUEST_ENTITY_TOO_LARGE: Final[int] = 413
 HTTP_UNPROCESSABLE_ENTITY: Final[int] = 422

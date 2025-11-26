@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """Health check router."""
+from typing import Any, Dict, Union
+
 from fastapi import APIRouter, Depends
-from typing import Dict, Any
+from fastapi.responses import JSONResponse
 
 from models import HealthResponse
 from services import OCRService
@@ -39,7 +41,6 @@ async def health_check() -> HealthResponse:
 
 @router.get(
     "/health/ready",
-    response_model=HealthResponse,
     summary="Readiness probe",
     description="Kubernetes-style readiness probe. Returns 200 if model is loaded and ready to serve requests.",
     responses={
@@ -47,7 +48,7 @@ async def health_check() -> HealthResponse:
             "description": "Service is ready to handle requests",
             "content": {
                 "application/json": {
-                    "example": {"ok": True}
+                    "example": {"ok": True, "model_loaded": True}
                 }
             }
         },
@@ -55,7 +56,7 @@ async def health_check() -> HealthResponse:
             "description": "Service not ready (model not loaded)",
             "content": {
                 "application/json": {
-                    "example": {"ok": False}
+                    "example": {"ok": False, "model_loaded": False, "reason": "Model not loaded"}
                 }
             }
         }
@@ -64,7 +65,7 @@ async def health_check() -> HealthResponse:
 )
 async def readiness_check(
     service: OCRService = Depends(get_ocr_service_dependency)
-) -> Dict[str, Any]:
+) -> Union[Dict[str, Any], JSONResponse]:
     """
     Readiness probe for Kubernetes deployments.
     
@@ -75,11 +76,8 @@ async def readiness_check(
         service: OCR service instance
         
     Returns:
-        Dict with readiness status
+        Dict with readiness status or JSONResponse with 503 status
     """
-    from fastapi import Response
-    from fastapi.responses import JSONResponse
-    
     is_ready = service.model_loader.is_loaded()
     
     if is_ready:

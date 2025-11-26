@@ -4,6 +4,8 @@ from typing import Optional, AsyncGenerator
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import ORJSONResponse
+from starlette.middleware.gzip import GZipMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -86,6 +88,7 @@ def create_app(
     service = ocr_service or get_ocr_service(config=app_config)
     
     # Create app with enhanced documentation and lifespan
+    # Use ORJSONResponse for 3-10x faster JSON serialization
     app = FastAPI(
         title=app_config.title,
         version=app_config.version,
@@ -103,6 +106,7 @@ def create_app(
         redoc_url="/redoc",
         openapi_url="/openapi.json",
         lifespan=lifespan,
+        default_response_class=ORJSONResponse,
     )
     
     # Store config and service in app state
@@ -124,6 +128,9 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    
+    # Add GZip compression for responses > 500 bytes
+    app.add_middleware(GZipMiddleware, minimum_size=500)
     
     # Add SlowAPI middleware for rate limiting
     app.add_middleware(SlowAPIMiddleware)

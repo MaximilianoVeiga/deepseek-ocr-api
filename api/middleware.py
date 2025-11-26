@@ -2,10 +2,9 @@
 """Middleware for request logging and correlation tracking."""
 import time
 import uuid
-from typing import Callable
-from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.types import ASGIApp
+from typing import Callable, Tuple
+
+from starlette.types import ASGIApp, Receive, Scope, Send, Message
 
 from logger import StructuredLogger
 from constants import (
@@ -14,16 +13,25 @@ from constants import (
     COMPONENT_MIDDLEWARE,
 )
 
+# Paths to skip logging (health check endpoints)
+SKIP_LOGGING_PATHS = frozenset({
+    "/health",
+    "/health/live",
+    "/health/ready",
+})
 
-class RequestLoggingMiddleware(BaseHTTPMiddleware):
+
+class RequestLoggingMiddleware:
     """
-    Middleware for logging requests and adding correlation IDs.
+    Pure ASGI middleware for logging requests and adding correlation IDs.
     
     This middleware:
     - Generates a unique correlation ID for each request
-    - Logs when requests are received
+    - Logs when requests are received (skips health endpoints)
     - Logs when requests are completed with duration and status
     - Adds correlation ID to response headers
+    
+    Uses pure ASGI pattern for better performance than BaseHTTPMiddleware.
     """
     
     def __init__(self, app: ASGIApp, logger: StructuredLogger):
@@ -34,67 +42,92 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             app: ASGI application
             logger: Logger instance
         """
-        super().__init__(app)
+        self.app = app
         self.logger = logger
     
-    async def dispatch(
-        self,
-        request: Request,
-        call_next: Callable
-    ) -> Response:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """
-        Process the request and add logging.
+        ASGI interface - process request/response.
         
         Args:
-            request: Incoming request
-            call_next: Next middleware/handler
-            
-        Returns:
-            Response: HTTP response
+            scope: ASGI connection scope
+            receive: Receive channel
+            send: Send channel
         """
+        # Only process HTTP requests
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        
+        # Extract request info from scope
+        method = scope.get("method", "")
+        path = scope.get("path", "")
+        
+        # Check if this path should skip logging
+        skip_logging = path in SKIP_LOGGING_PATHS
+        
         # Generate correlation ID
-        correlation_id = str(uuid.uuid4())
+        correlation_id = uuid.uuid4().hex
         
-        # Add correlation ID to request state
-        request.state.correlation_id = correlation_id
+        # Store correlation ID in scope state for access by handlers
+        if "state" not in scope:
+            scope["state"] = {}
+        scope["state"]["correlation_id"] = correlation_id
         
-        # Log request received
-        self.logger.info(
-            LOG_REQUEST_RECEIVED.format(
-                method=request.method,
-                path=request.url.path
-            ),
-            component=COMPONENT_MIDDLEWARE,
-            correlation_id=correlation_id,
-            method=request.method,
-            path=request.url.path,
-            client_host=request.client.host if request.client else None,
-        )
+        # Get client host
+        client = scope.get("client")
+        client_host = client[0] if client else None
         
-        # Process request and measure duration
-        start_time = time.time()
-        response = await call_next(request)
+        # Log request received (skip for health endpoints)
+        if not skip_logging:
+            self.logger.info(
+                LOG_REQUEST_RECEIVED.format(method=method, path=path),
+                component=COMPONENT_MIDDLEWARE,
+                correlation_id=correlation_id,
+                method=method,
+                path=path,
+                client_host=client_host,
+            )
         
-        duration_ms = int((time.time() - start_time) * 1000)
+        # Track timing and response status
+        start_time = time.perf_counter()
+        status_code = 500  # Default in case of error
         
-        # Add correlation ID to response headers
-        response.headers["X-Correlation-ID"] = correlation_id
+        async def send_wrapper(message: Message) -> None:
+            """Wrap send to capture status and inject headers."""
+            nonlocal status_code
+            
+            if message["type"] == "http.response.start":
+                status_code = message.get("status", 500)
+                
+                # Add correlation ID to response headers
+                headers = list(message.get("headers", []))
+                headers.append((b"x-correlation-id", correlation_id.encode()))
+                message = {
+                    "type": message["type"],
+                    "status": status_code,
+                    "headers": headers,
+                }
+            
+            await send(message)
         
-        # Log request completed
-        self.logger.info(
-            LOG_REQUEST_COMPLETED.format(
-                method=request.method,
-                path=request.url.path,
-                status_code=response.status_code,
-                duration_ms=duration_ms
-            ),
-            component=COMPONENT_MIDDLEWARE,
-            correlation_id=correlation_id,
-            method=request.method,
-            path=request.url.path,
-            status_code=response.status_code,
-            duration_ms=duration_ms,
-        )
-        
-        return response
-
+        try:
+            await self.app(scope, receive, send_wrapper)
+        finally:
+            # Log request completed (skip for health endpoints)
+            if not skip_logging:
+                duration_ms = int((time.perf_counter() - start_time) * 1000)
+                self.logger.info(
+                    LOG_REQUEST_COMPLETED.format(
+                        method=method,
+                        path=path,
+                        status_code=status_code,
+                        duration_ms=duration_ms
+                    ),
+                    component=COMPONENT_MIDDLEWARE,
+                    correlation_id=correlation_id,
+                    method=method,
+                    path=path,
+                    status_code=status_code,
+                    duration_ms=duration_ms,
+                )

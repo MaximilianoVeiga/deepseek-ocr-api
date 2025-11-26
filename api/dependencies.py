@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """FastAPI dependencies for dependency injection."""
-from typing import Generator
 from fastapi import Request
 
 from config import Config

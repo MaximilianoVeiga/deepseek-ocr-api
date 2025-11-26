@@ -98,7 +98,7 @@ class PDFProcessor:
             OCRProcessingError: If inference fails
         """
         # Run synchronous inference in thread pool
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
             self.executor,
             self.inference_engine.infer_image,

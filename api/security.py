@@ -6,7 +6,7 @@ from fastapi.security import APIKeyHeader
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from constants import HTTP_BAD_REQUEST, HTTP_INTERNAL_SERVER_ERROR
+from constants import HTTP_BAD_REQUEST, HTTP_INTERNAL_SERVER_ERROR, HTTP_UNAUTHORIZED
 
 
 # API Key Authentication
@@ -59,14 +59,14 @@ async def verify_api_key(
     # Check if API key is provided
     if not api_key:
         raise HTTPException(
-            status_code=HTTP_BAD_REQUEST,
+            status_code=HTTP_UNAUTHORIZED,
             detail="API key required. Provide X-API-Key header."
         )
     
     # Verify API key
     if api_key != config.api_key:
         raise HTTPException(
-            status_code=HTTP_BAD_REQUEST,
+            status_code=HTTP_UNAUTHORIZED,
             detail="Invalid API key"
         )
     
@@ -113,5 +113,5 @@ def validate_prompt(prompt: str, max_length: int = 2000) -> None:
         if pattern in prompt_lower:
             raise HTTPException(
                 status_code=HTTP_BAD_REQUEST,
-                detail=f"Prompt contains suspicious pattern: '{pattern}'"
+                detail="Prompt contains invalid or suspicious content"
             )
