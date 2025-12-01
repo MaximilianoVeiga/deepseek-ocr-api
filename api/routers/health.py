@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 """Health check router."""
-from typing import Any, Dict, Union
-
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
@@ -41,6 +39,7 @@ async def health_check() -> HealthResponse:
 
 @router.get(
     "/health/ready",
+    response_model=None,
     summary="Readiness probe",
     description="Kubernetes-style readiness probe. Returns 200 if model is loaded and ready to serve requests.",
     responses={
@@ -65,7 +64,7 @@ async def health_check() -> HealthResponse:
 )
 async def readiness_check(
     service: OCRService = Depends(get_ocr_service_dependency)
-) -> Union[Dict[str, Any], JSONResponse]:
+) -> JSONResponse:
     """
     Readiness probe for Kubernetes deployments.
     
@@ -81,7 +80,10 @@ async def readiness_check(
     is_ready = service.model_loader.is_loaded()
     
     if is_ready:
-        return {"ok": True, "model_loaded": True}
+        return JSONResponse(
+            status_code=200,
+            content={"ok": True, "model_loaded": True}
+        )
     else:
         return JSONResponse(
             status_code=503,

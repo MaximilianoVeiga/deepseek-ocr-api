@@ -21,9 +21,22 @@ Write-Host "[install-deps] Activating virtual environment..." -ForegroundColor Y
 Write-Host "[install-deps] Upgrading pip..." -ForegroundColor Yellow
 python -m pip install --upgrade pip
 
+# Install orjson (required for ORJSONResponse)
+Write-Host "[install-deps] Installing orjson..." -ForegroundColor Yellow
+pip install orjson
+
 # Install PyTorch with CUDA support first
 Write-Host "[install-deps] Installing PyTorch with CUDA 13.0 support..." -ForegroundColor Yellow
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
+
+# Install Flash Attention 2 (Optional, requires CUDA Toolkit/nvcc)
+if (Get-Command "nvcc" -ErrorAction SilentlyContinue) {
+    Write-Host "[install-deps] Installing Flash Attention 2..." -ForegroundColor Yellow
+    pip install flash-attn --no-build-isolation
+} else {
+    Write-Host "[install-deps] CUDA Compiler (nvcc) not found. Skipping Flash Attention 2 (optional)." -ForegroundColor Yellow
+    Write-Host "[install-deps] Standard attention will be used. This is normal for Windows users without full CUDA dev environment." -ForegroundColor Gray
+}
 
 # Install all dependencies from requirements.txt
 Write-Host "[install-deps] Installing dependencies from requirements.txt..." -ForegroundColor Yellow
